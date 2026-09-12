@@ -75,7 +75,7 @@ This starts both processes with prefixed output:
 - `api` — `tsx watch apps/api/src/server.ts`, prints `Postgres connected` and `server running on port 8000`
 - `web` — Vite dev server, prints a `http://localhost:5173` URL
 
-Open the URL and log in as the demo user (or sign up: one screen creates your organization and chart of accounts). Add an income and an expense; the dashboard reads from the ledger. `http://localhost:5173/healthz` returns `{"ok":true}` through the proxy.
+Open the URL and log in as the demo user (or sign up: one screen creates your organization and chart of accounts). The Overview leads with a sentence about the last 30 days; Transactions shows the uncategorized queue first. Press `?` for keyboard shortcuts. `http://localhost:5173/healthz` returns `{"ok":true}` through the proxy.
 
 Run one side only with `npm run dev:api` or `npm run dev:web`.
 

@@ -2,27 +2,33 @@
 
 Two views: what runs today, and the target the roadmap builds toward. Decisions behind the target are recorded in `docs/adr/`.
 
-## Today (Slice 1, PR d)
+## Today (Slice 1, lane 1.3)
 
 ```
-  apps/web (React 19 + Vite)                      apps/api (Express 5, TypeScript, ESM)
-  ┌────────────────────────────┐  /api (proxy)  ┌──────────────────────────────────────────────────┐
-  │ pages: Login, SignUp, Home │ ─────────────▶ │ app.ts: requestLogger ─▶ cors ─▶ json             │
-  │        Income, Expense     │                │   ─▶ routes.ts (route TABLE: access per route)    │
-  │ utils/api.js (adapter:     │                │        protect ─▶ requireOrg(role) ─▶ validate    │
-  │   minor units → legacy     │                │        ─▶ services/{auth,transactions,dashboard}  │
-  │   rows for today's pages)  │                │   ─▶ notFoundHandler ─▶ errorHandler (envelope)   │
-  └────────────────────────────┘                │ services/ledger (post · reverse · recategorize ·  │   ┌──────────┐
-  packages/shared: money (minor units) + dates  │   lock · trial balance) ─▶ Prisma 7 (pg adapter) ─┼──▶│ Postgres │
-                                                │ prisma/schema.prisma + migration with triggers    │   └──────────┘
-                                                │ fixtures/demoOrg · scripts/migrate-mongo-to-pg    │
-                                                └──────────────────────────────────────────────────┘
-  test/: 40 API tests on TEST_DATABASE_URL (auth, transactions, dashboard, ledger, properties, generated authz matrix) + 25 shared tests
+  apps/web (React 19 + Vite + Tailwind 4)             apps/api (Express 5, TypeScript, ESM)
+  ┌──────────────────────────────────┐ /api (proxy) ┌────────────────────────────────────────────────┐
+  │ pages: Login · SignUp ·          │ ───────────▶ │ app.ts: requestLogger ─▶ cors ─▶ json           │
+  │        Overview · Transactions   │              │   ─▶ routes.ts (route TABLE, access per route)  │
+  │ components/layout/AppShell       │              │        protect ─▶ requireOrg(role) ─▶ validate  │
+  │ components/ui: Button · Field ·  │              │        ─▶ services/{auth,transactions,dashboard}│
+  │   Sheet (dialog / bottom sheet)  │              │   ─▶ notFoundHandler ─▶ errorHandler (envelope) │
+  │ components/transactions: Row ·   │              │ services/ledger: post · reverse · recategorize ·│  ┌──────────┐
+  │   CategoryPicker (+split) ·      │              │   lock · trial balance ─▶ Prisma 7 (pg adapter) ┼─▶│ Postgres │
+  │   AddTransactionForm             │              │ prisma/schema.prisma + migration with triggers  │  └──────────┘
+  │ components/overview/InOutChart   │              │ fixtures/demoOrg · scripts/migrate-mongo-to-pg  │
+  │ lib/api.js · lib/format.js       │              └────────────────────────────────────────────────┘
+  │ index.css: @theme design tokens  │
+  └──────────────────────────────────┘
+  tests: 40 API (TEST_DATABASE_URL, incl. generated authz matrix) · 10 web (Testing Library) · 25 shared
 ```
 
 MongoDB is gone from the runtime; `mongoose` remains a dev dependency for the one-time migration script. `docs/ledger.md` explains the ledger rules; `docs/api.md` lists every route.
 
-Still pending for the Slice 1 lanes: refresh tokens, password reset, email verification (auth lane); the Transactions page and design tokens (1.3); CSV import and Plaid sandbox (1.4); metrics + Overview (E1); the weekly brief (E8).
+### Design rules (lint-enforced by `apps/web/scripts/check-styles.mjs`)
+
+Tokens live in `apps/web/src/index.css` (`@theme`): two typefaces (Fraunces for the headline sentence, Manrope for UI), one accent (`--color-accent`), light theme, 6px radius, 16px body. No `box-shadow` except focus rings, no gradients, no cards as layout, no system font stacks. Motion: a 300ms opacity tween on the headline, nothing else. Every overlay is `components/ui/Sheet` (dialog on desktop, bottom sheet under 640px); every input goes through `components/ui/Field` (visible label, 44px). Add `check-styles:allow` to a line to exempt it, with a reason.
+
+Still pending for the Slice 1 lanes: refresh tokens, password reset, email verification (auth lane); CSV import and Plaid sandbox (1.4); metrics + Overview headline extensions (E1); the weekly brief (E8); Settings page; "always categorize X this way" rules (land with import).
 
 ## Target
 

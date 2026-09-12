@@ -2,7 +2,7 @@
 
 A web-based financial admin platform for solo and micro-business owners, evolving from the original Expense Tracker. The destination is a double-entry ledger with bank feeds, invoicing, reports, and a grounded AI "Money Brief" that turns bookkeeping data into a specific next action. The roadmap, design decisions, and review history live in `docs/` and the ADRs in `docs/adr/`.
 
-**Current state (Slice 1, PR d):** the app runs entirely on Postgres. Auth creates an organization per signup (owner membership, default chart of accounts); every route is organization-scoped and role-checked (`docs/api.md`), with a generated authz matrix covering all of them; transactions are journal entries in a **double-entry ledger** with database-enforced invariants (`docs/ledger.md`); the old Expense Tracker data has been migrated. The current pages still look like the tutorial app; the Transactions page, CSV import, Overview metrics, and the weekly AI brief are the next lanes (`docs/architecture.md`).
+**Current state (Slice 1, lane 1.3):** the app runs entirely on Postgres with a double-entry ledger underneath (`docs/ledger.md`), organization-scoped, role-checked routes (`docs/api.md`), and a new UI: an **Overview** that leads with one plain-language sentence about the last 30 days, and a **Transactions** page with an uncategorized-first list, a searchable category picker with splits, undo, bulk categorize, keyboard shortcuts, and a mobile layout. Design tokens (two typefaces, one accent, light theme, no cards/shadows/gradients) are lint-enforced. Next lanes: CSV import, Overview metrics, the weekly AI brief (`docs/architecture.md`).
 
 ## Repository layout
 
@@ -10,7 +10,7 @@ A web-based financial admin platform for solo and micro-business owners, evolvin
 ledgeriq/
 ├── apps/
 │   ├── api/          # Express 5 + TypeScript API on Prisma 7 / Postgres
-│   └── web/          # React 19 + Vite app
+│   └── web/          # React 19 + Vite + Tailwind 4 app (Headless UI, Recharts)
 ├── packages/
 │   └── shared/       # Schemas, money and date helpers shared by api and web (scaffold)
 ├── docs/             # Setup, architecture, ledger design, ADRs
@@ -38,8 +38,9 @@ Other root scripts: `npm run dev:api`, `npm run dev:web`, `npm run build` (web),
 ## Features (today)
 
 - Email/password auth with JWT; signup creates your organization and chart of accounts; roles owner / admin / bookkeeper / accountant / viewer
-- Dashboard from the ledger: totals, cash on hand, uncategorized count, 30/60-day windows in your timezone, recent transactions
-- Money in / money out: add, edit (manual entries are corrected by reversal), reverse, split across categories, Excel export (the Download buttons work now)
+- Overview: headline sentence for the last 30 days (present in empty and partial states too), cash on hand, one primary action, 30-day in/out chart with a screen-reader table, recent activity
+- Transactions: uncategorized rows first with an accent, filters (needs a category / all / in / out), search, cursor-paginated Load more, category picker (searchable, grouped, split mode), 8-second undo, bulk categorize with partial-failure retry, add-transaction sheet, xlsx export
+- Keyboard: `n` add, `/` search, `j`/`k` move, `c` categorize, `x` select, `?` help; 44px targets, visible labels, focus rings, `aria-live` headline
 - Every read and write is organization-scoped; foreign ids are 404s; auth responses never include the password hash
 - Request ids on every response and a structured error envelope (`{ message, error: { type, code, param?, requestId } }`)
 

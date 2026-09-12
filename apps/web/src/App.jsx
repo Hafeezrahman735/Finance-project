@@ -1,60 +1,37 @@
-import './App.css'
-import React from 'react';
-import SignUp from './pages/Auth/SignUp';
-import Home from './pages/dashboard/Home';
+import React from "react";
+import { Toaster } from "react-hot-toast";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import UserProvider from "./context/UserProvider";
 import Login from "./pages/Auth/Login";
-import Income from './pages/dashboard/Income';
-import Expense from './pages/dashboard/Expense';
-import UserProvider from './context/userContent';
-import {Toaster} from "react-hot-toast";
+import SignUp from "./pages/Auth/SignUp";
+import Overview from "./pages/Overview";
+import Transactions from "./pages/Transactions";
 
-
-import {
-  BrowserRouter as Router,
-  Route,
-  Navigate,
-  Routes,
-} from "react-router-dom";
-
-const App = () => {
+export default function App() {
   return (
     <UserProvider>
-      <div>
-        <Router>
-          <Routes>
-            <Route path="/" element={<Root />} />
-            <Route path="/login" exact element={<Login />} />
-            <Route path="/signUp" exact element={<SignUp />} />
-            <Route path="/dashboard" exact element={<Home />} />
-            <Route path="/income" exact element={<Income />} />
-            <Route path="/expense" exact element={<Expense />} />
-          </Routes>
-        </Router>
-      </div>
-
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Root />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<SignUp />} />
+          <Route path="/signUp" element={<Navigate to="/signup" replace />} />
+          <Route path="/overview" element={<Overview />} />
+          <Route path="/dashboard" element={<Navigate to="/overview" replace />} />
+          <Route path="/transactions" element={<Transactions />} />
+          <Route path="/income" element={<Navigate to="/transactions" replace />} />
+          <Route path="/expense" element={<Navigate to="/transactions" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
       <Toaster
-        toastOptions={{
-          className: "",
-          style: {fontSize: '13px'},
-        
-        }}
+        position="bottom-center"
+        toastOptions={{ style: { border: "1px solid #e5e2db", boxShadow: "none", background: "#ffffff", color: "#1c1b18", fontSize: "15px" } }}
       />
     </UserProvider>
-  )
+  );
 }
 
-
-export default App
-
-const Root = () => {
-  // chec if token exist in loacalStorage
-  const isAuthenticated = !!localStorage.getItem("token");
-
-  //redirect to dashboard if authicated otherwise to login
-  return isAuthenticated ? (
-    <Navigate to="/dashboard" />
-  ) : (
-    <Navigate to="/login" />
-  );
-  
+function Root() {
+  return localStorage.getItem("token") ? <Navigate to="/overview" replace /> : <Navigate to="/login" replace />;
 }

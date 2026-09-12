@@ -36,7 +36,8 @@ Schema changes: edit `apps/api/prisma/schema.prisma`, run `npm run db:migrate:de
 - Tenancy: every query goes through an org-scoped repository (ADR 0003).
 - API: plural nouns, sub-resource actions, `camelCase`, `{ data, nextCursor }` lists, structured error envelope (`docs/architecture.md`).
 - UI copy: plain language, never "debit" or "credit"; terse, one warm line at most.
-- Styling: Tailwind tokens only; no box-shadow except focus rings and the mobile bottom sheet; no gradients.
+- Styling: Tailwind tokens from `apps/web/src/index.css` only; no box-shadow except focus rings; no gradients; no cards as layout. `npm run lint -w @ledgeriq/web` runs `scripts/check-styles.mjs`, which fails on violations. Overlays use `components/ui/Sheet`; inputs use `components/ui/Field`.
+- Web tests: Vitest + Testing Library in `apps/web/test/` (`npm run test -w @ledgeriq/web`). Mock `src/lib/api` for page tests.
 
 ## Decisions
 

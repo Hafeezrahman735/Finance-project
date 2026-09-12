@@ -42,6 +42,10 @@ run("dashboard", () => {
     expect(view.cashOnHandMinor).toBe(28500);
     expect(view.uncategorizedCount).toBe(2);
     expect(view.recentTransactions.map((t) => t.memo)).toEqual(["Today", "Rent", "Day 30", "Day 31", "Old"]);
+    expect(view.last30Days.daily).toHaveLength(30);
+    expect(view.last30Days.daily[0]).toEqual({ date: "2026-08-13", inMinor: 10000, outMinor: 0 });
+    expect(view.last30Days.daily.at(-1)).toEqual({ date: "2026-09-11", inMinor: 30000, outMinor: 0 });
+    expect(view.last30Days.daily.find((d) => d.date === "2026-09-01")).toEqual({ date: "2026-09-01", inMinor: 0, outMinor: 12000 });
   });
 
   it("works on the demo organization and keeps cash equal to the ledger", async () => {

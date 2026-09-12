@@ -1,98 +1,80 @@
-import React, { useContext, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import "../../CSS/login.css"
-import axiosInstance from '../../utils/axiosinstance'
-import { API_PATHS } from '../../utils/apiPaths'
-import { UserContext } from '../../context/userContent'
-import { validateEmail } from '../../utils/helper';
+import React, { useContext, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import Button from "../../components/ui/Button";
+import Field from "../../components/ui/Field";
+import { UserContext } from "../../context/userContext";
+import { auth, errorMessage } from "../../lib/api";
+import AuthLayout from "./AuthLayout";
 
+/** One screen, four fields, straight to the Overview (plan: Pass 2, Signup). */
+export default function SignUp() {
+  const [form, setForm] = useState({ fullName: "", email: "", password: "", organizationName: "" });
+  const [errors, setErrors] = useState({});
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const { updateUser } = useContext(UserContext);
+  const navigate = useNavigate();
+  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
-const SignUp = () => {
-    const [name, setName] = useState()
-    const [email, setEmail] = useState()
-    const [password, setPassword] = useState()
-
-    const [error, setError] = useState(null);
-    const {updateUser} = useContext(UserContext);
-    const navigate = useNavigate();
-
-    const handleSubmit = async (e) => {
-      e.preventDefault()
-
-      if (!validateEmail(email)){
-          setError("Please enter a valid email");
-          return;
-        }
-      
-      if(!password) {
-        setError("please enter the correct password");
-        return;
-      }
-
-      if (!name) {
-        setError("please enter your Name");
-      }
-      
-      setError("");
-
-      try {
-        const response = await axiosInstance.post(API_PATHS.AUTH.REGISTER, {
-          fullName: name,
-          email,
-          password,
-        });
-
-        const {token, user} = response.data;
-
-        if (token) {
-          localStorage.setItem("token", token);
-          updateUser(user);
-          navigate('/dashboard');
-        }
-      } catch (error) {
-        if (error.response && error.response.data.message) {
-          setError(error.response.data.message);
-        } else {
-          setError("Something went wrong. fuck off");
-        }
-      }
-    };
+  const submit = async (e) => {
+    e.preventDefault();
+    const next = {};
+    if (!form.fullName.trim()) next.fullName = "Your name is required.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) next.email = "Enter a valid email address.";
+    if (form.password.length < 8) next.password = "Use at least 8 characters.";
+    setErrors(next);
+    setError(null);
+    if (Object.keys(next).length) return;
+    setBusy(true);
+    try {
+      const data = await auth.register({
+        fullName: form.fullName.trim(),
+        email: form.email.trim(),
+        password: form.password,
+        ...(form.organizationName.trim() ? { organizationName: form.organizationName.trim() } : {}),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      });
+      localStorage.setItem("token", data.token);
+      updateUser(data);
+      navigate("/overview");
+    } catch (err) {
+      setError(errorMessage(err, "Could not create the account"));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
-    <div className='auth-layout'>
-      <div className='container'>
-        <div className='header'>
-          <h2 className='welcome'>Register</h2>
-        </div>
-        <form onSubmit={handleSubmit} className='login-form'>
-          <div className='input-group'>
-            <label htmlFor='Name' className='input-label'>
-              <strong>Name</strong>
-            </label>
-            <input type="text" placeholder='Enter Name' autoComplete='off' name='name' className='input-field' onChange={(e) => setName(e.target.value)}/>
-          </div>
-          <div className='input-group'>
-            <label htmlFor='email' className='input-label'>
-              <strong>Email</strong>
-            </label>
-            <input type='email' placeholder='Enter Email' autoComplete='off' name="email" className='input-field' onChange={(e) => setEmail(e.target.value)}></input>
-          </div>
-          <div className='input-group'>
-            <label htmlFor='email' className='input-label'>
-              <strong>Password</strong>
-            </label>
-            <input type='password' placeholder='Enter Password' autoComplete='off' name="Password" className='input-field' onChange={(e) => setPassword(e.target.value)}></input>
-          </div>
-          {error && <div className='error-message'>{error}</div>}
-          <button type='submit' className='button'>Register</button>
-        </form>
-        <div className='link-login'>
-          <p className='acc'>Already have an account?</p>
-          <button className='button' onClick={()=> navigate("/login")}>Login</button>
-        </div>
-      </div>
-    </div>
-  )
+    <AuthLayout
+      title="Create your account"
+      footer={
+        <>
+          Already have one? <Link to="/login">Log in</Link>
+        </>
+      }
+    >
+      <form onSubmit={submit} noValidate className="flex flex-col gap-4">
+        <Field label="Your name" error={errors.fullName}>
+          <input autoComplete="name" autoFocus value={form.fullName} onChange={set("fullName")} />
+        </Field>
+        <Field label="Business name" hint="You can change this later.">
+          <input autoComplete="organization" value={form.organizationName} onChange={set("organizationName")} placeholder={form.fullName.trim() ? `${form.fullName.trim()}'s books` : ""} />
+        </Field>
+        <Field label="Email" error={errors.email}>
+          <input type="email" autoComplete="email" value={form.email} onChange={set("email")} />
+        </Field>
+        <Field label="Password" hint="At least 8 characters." error={errors.password}>
+          <input type="password" autoComplete="new-password" value={form.password} onChange={set("password")} />
+        </Field>
+        {error && (
+          <p role="alert" className="text-negative">
+            {error}
+          </p>
+        )}
+        <Button type="submit" variant="primary" disabled={busy} className="mt-2">
+          {busy ? "Creating…" : "Create account"}
+        </Button>
+      </form>
+    </AuthLayout>
+  );
 }
-
-export default SignUp;

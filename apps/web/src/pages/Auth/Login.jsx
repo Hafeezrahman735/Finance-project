@@ -1,89 +1,64 @@
-import React, { useState, useContext } from 'react';
-import AuthLayout from '../../components/layout/AuthLayout';
-import { validateEmail } from '../../utils/helper';
-import { Navigate, useNavigate } from 'react-router-dom';
-import "../../CSS/login.css";
-import axiosInstance from '../../utils/axiosinstance';
-import { API_PATHS } from '../../utils/apiPaths';
-import { UserContext } from '../../context/userContent';
+import React, { useContext, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import Button from "../../components/ui/Button";
+import Field from "../../components/ui/Field";
+import { UserContext } from "../../context/userContext";
+import { auth, errorMessage } from "../../lib/api";
+import AuthLayout from "./AuthLayout";
 
-const Login = () => {
-
-  const [email, loginEmail] = useState("");
-  const [password, loginPassword] = useState("");
+export default function Login() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const { updateUser } = useContext(UserContext);
   const navigate = useNavigate();
 
-  const {updateUser} = useContext(UserContext);
-
-  const [error, setError] = useState(null);
-
-  const handleLogin = async (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-
-    if (!validateEmail(email)) {
-      setError("Please enter a valid Email Address");
-      return
-    }
-
-    if (!password) {
-      setError("please enter the password");
+    setError(null);
+    if (!email.trim() || !password) {
+      setError("Email and password are required.");
       return;
     }
-
-    setError("")
-
+    setBusy(true);
     try {
-      const response = await axiosInstance.post(API_PATHS.AUTH.LOGIN, {
-        email,
-        password,
-      });
-      const {token, user} = response.data;
-      updateUser(user);
-
-      if (token) {
-        localStorage.setItem("token", token);
-        navigate('/dashboard');
-      }
-    } catch (error) {
-      if (error.response && error.response.data.message) {
-        setError(error.response.data.message);
-      } else {
-        setError("Something went wrong fuck off");
-      }
+      const data = await auth.login({ email: email.trim(), password });
+      localStorage.setItem("token", data.token);
+      updateUser(data);
+      navigate("/overview");
+    } catch (err) {
+      setError(errorMessage(err, "Could not log in"));
+    } finally {
+      setBusy(false);
     }
-  }
+  };
 
   return (
-    <div className='auth-layout'>
-      <div className='container'>
-        <div className='header'>
-          <h3 className="welcome">Welcome Back</h3>
-          <p className="subtitle">Please Enter Your Details</p>
-        </div>
-
-        <form onSubmit={handleLogin} className='form'>
-
-          <div className='input-group'>
-            <label htmlFor='email' className='input-label'>
-              <strong>Email</strong>
-            </label>
-            <input type='email' placeholder='Enter Email' autoComplete='off' name="email" id="email" className='input-field' onChange={(e) => loginEmail(e.target.value)}></input>
-          </div>
-
-          {error && <div className='error-message'>{error}</div>}
-
-          <div className='input-group'>
-            <label htmlFor='password' className='input-label'>
-              <strong>Password</strong>
-            </label>
-            <input type='password' placeholder='Enter Password' autoComplete='off' name="password" id="password" className='input-field' onChange={(e) => loginPassword(e.target.value)}></input>
-          </div>
-          <button type='submit' className='button'>Login</button>
-        </form>
-
-      </div>
-    </div>
-  )
+    <AuthLayout
+      title="Log in"
+      footer={
+        <>
+          New here? <Link to="/signup">Create an account</Link>
+        </>
+      }
+    >
+      <form onSubmit={submit} noValidate className="flex flex-col gap-4">
+        <Field label="Email">
+          <input type="email" autoComplete="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} />
+        </Field>
+        <Field label="Password">
+          <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        </Field>
+        {error && (
+          <p role="alert" className="text-negative">
+            {error}
+          </p>
+        )}
+        <Button type="submit" variant="primary" disabled={busy} className="mt-2">
+          {busy ? "Logging in…" : "Log in"}
+        </Button>
+      </form>
+    </AuthLayout>
+  );
 }
-
-export default Login;

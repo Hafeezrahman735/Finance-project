@@ -1,69 +1,79 @@
+@import "tailwindcss";
+@import "@fontsource-variable/fraunces";
+@import "@fontsource-variable/manrope";
 
-:root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+/*
+ * Design tokens (plan: Design specification, Pass 5). Light default (T4).
+ * One accent, no gradients, no decorative shadows (enforced by scripts/check-styles.mjs). check-styles:allow
+ * Body ≥ 16px, contrast ≥ 4.5:1 on body text.
+ */
+@theme {
+  --font-display: "Fraunces Variable", Georgia, serif;
+  --font-sans: "Manrope Variable", "Segoe UI", Helvetica, Arial, sans-serif;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  --color-bg: #f8f7f4;
+  --color-surface: #ffffff;
+  --color-line: #e5e2db;
+  --color-text: #1c1b18;
+  --color-muted: #625f57;
+  --color-accent: #0f766e;
+  --color-accent-strong: #0b5c56;
+  --color-accent-soft: #e0f2f0;
+  --color-positive: #1a7f4b;
+  --color-negative: #b42318;
+  --color-warn: #b45309;
+  --color-warn-soft: #fef3c7;
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  --text-headline: 2.5rem;
+  --text-headline--line-height: 1.15;
+  --text-headline-sm: 2rem;
+  --text-headline-sm--line-height: 1.2;
+  --text-title: 1.5rem;
+  --text-title--line-height: 1.3;
+
+  --radius-ui: 6px;
+  --radius-sheet: 12px;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
+@layer base {
+  html {
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
   }
-  a:hover {
-    color: #747bff;
+  body {
+    margin: 0;
+    min-height: 100dvh;
   }
-  button {
-    background-color: #f9f9f9;
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+  button, input, select, textarea {
+    font: inherit;
+    color: inherit;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  a {
+    color: var(--color-accent);
+  }
+  a:visited {
+    color: var(--color-accent-strong);
+  }
+  /* Tabular numerals everywhere money appears. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  .headline-tween {
+    transition: opacity 300ms ease;
   }
 }
