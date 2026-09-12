@@ -1,4 +1,6 @@
-export const BASE_URL = "http://localhost:8000";
+// Empty by default: the Vite dev server proxies /api to the API (vite.config.js),
+// so the app is same-origin. Set VITE_API_URL only for a separately hosted API.
+export const BASE_URL = import.meta.env.VITE_API_URL ?? "";
 
 export const API_PATHS = {
     AUTH: {

@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {HiOutlineMenu, HiOutlineX} from "react-icons/hi";
 import Sidebar from './Sidebar';
 import "../../CSS/bar.css";
 
 
-const Navbar = ({activeMenu, openSideMenu, setOpenSideMenu}) => {
+const Navbar = ({openSideMenu, setOpenSideMenu}) => {
 
 
   return (

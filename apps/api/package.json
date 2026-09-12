@@ -1,26 +1,45 @@
 {
   "name": "@ledgeriq/api",
-  "version": "1.0.0",
-  "description": "",
-  "main": "server.js",
+  "version": "0.2.0",
+  "private": true,
+  "description": "LedgerIQ API (Express 5, TypeScript). Still on MongoDB until the Prisma/Postgres PR.",
+  "type": "module",
+  "main": "dist/server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "devDependencies": {
-    "nodemon": "^3.1.10"
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
+    "exceljs": "^4.4.0",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.16.0",
-    "xlsx": "^0.18.5"
+    "pino": "^9.6.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.25.0",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.1",
+    "@types/jsonwebtoken": "^9.0.9",
+    "@types/node": "^22.14.0",
+    "@types/supertest": "^6.0.3",
+    "eslint": "^9.25.0",
+    "globals": "^16.0.0",
+    "mongodb-memory-server": "^10.1.4",
+    "pino-pretty": "^13.0.0",
+    "supertest": "^7.1.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.31.0",
+    "vitest": "^3.1.1"
   }
 }

@@ -2,21 +2,22 @@
 
 Two views: what runs today, and the target the roadmap builds toward. Decisions behind the target are recorded in `docs/adr/`.
 
-## Today (Slice 1, PR a)
+## Today (Slice 1, PR b)
 
 ```
-  apps/web (React 19 + Vite)                 apps/api (Express 5, CommonJS)
-  ┌────────────────────────────┐   HTTP    ┌──────────────────────────────────┐   ┌──────────┐
-  │ pages: Login, SignUp, Home │ ────────▶ │ routes ─▶ controllers ─▶ models  │──▶│ MongoDB  │
-  │        Income, Expense     │  /api/v1  │ middleware/authMiddleware (JWT)  │   │ (Atlas)  │
-  │ context/UserContext        │           │ models: User, Income, Expense    │   └──────────┘
-  │ utils/axiosinstance (token,│           │ xlsx export (writes to disk)     │
-  │        401 → /login)       │           └──────────────────────────────────┘
-  └────────────────────────────┘
-  packages/shared: scaffold only
+  apps/web (React 19 + Vite)                      apps/api (Express 5, TypeScript, ESM)
+  ┌────────────────────────────┐  /api (proxy)  ┌────────────────────────────────────────────────┐   ┌──────────┐
+  │ pages: Login, SignUp, Home │ ─────────────▶ │ app.ts: requestLogger ─▶ cors ─▶ json           │──▶│ MongoDB  │
+  │        Income, Expense     │                │   ─▶ routes.ts (validateBody ─▶ protect ─▶      │   │ (Atlas;  │
+  │ context/UserContext        │                │        controllers/{auth,transactions,dashboard})│   │ in-memory│
+  │ utils/axiosinstance (token,│                │   ─▶ notFoundHandler ─▶ errorHandler (envelope) │   │ in tests)│
+  │        401 → /login)       │                │ config.ts (zod, tiered) · lib/{logger,errors,excel}│ └──────────┘
+  └────────────────────────────┘                │ models: User (+DTO), Income, Expense             │
+  packages/shared: scaffold only                └────────────────────────────────────────────────┘
+  test/: Vitest + Supertest against mongodb-memory-server (22 tests)
 ```
 
-Known defects carried from the tutorial codebase, fixed in the port rather than patched here: update/delete routes do not filter by owner (`apps/api/controllers/incomeController.js`, `expenseController.js`); amounts are floating `Number`; auth responses include the password hash; `{timestampes: true}` typo disables timestamps; Excel export writes to the server filesystem; the API base URL is hardcoded in the web app.
+Fixed in the port: owner filter on every update/delete; user DTOs (no password hash in any response); `timestamps` typo; Excel export streamed to the response with a formula-injection guard; API base URL from `VITE_API_URL` (empty by default, Vite proxies `/api`); the income delete route the web app calls but the old API never served. Still pending for the Prisma PR: float amounts (ADR 0002), wall-clock date windows, and the route naming conventions below.
 
 ## Target
 
@@ -74,8 +75,8 @@ Slice 1 lands in four revertible PRs, then feature lanes:
 
 | PR / lane | Contents |
 |---|---|
-| (a) this PR | Workspaces, docs, ADRs, no behavior change |
-| (b) | TypeScript port of `apps/api`, still on Mongo; lint clean; test harness |
+| (a) done | Workspaces, docs, ADRs, no behavior change |
+| (b) this PR | TypeScript port of `apps/api`, still on Mongo; lint clean; Vitest + Supertest; GitHub Actions CI |
 | (c) | Prisma schema, ledger service, Mongo → Postgres migration script with dry run |
 | (d) | Cut over to Postgres; remove Mongoose |
 | then | auth + organizations · Transactions UI · CSV import · Plaid sandbox · metrics + Overview · weekly brief |

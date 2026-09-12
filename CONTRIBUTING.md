@@ -19,11 +19,12 @@ See `docs/setup.md`. One `npm install` at the root; never inside `apps/*`.
 | `npm run dev` | api + web together |
 | `npm run dev:api` / `npm run dev:web` | one side |
 | `npm run build` | web production build |
-| `npm run lint` | ESLint in every workspace that defines it |
-| `npm run test` | test suites (arrive in PR b) |
-| `npm run ci` | lint, test, build in the same order as CI |
+| `npm run lint` | ESLint in every workspace (must be clean) |
+| `npm run typecheck` | `tsc --noEmit` for the API |
+| `npm run test` | API suite: Vitest + Supertest on an in-memory MongoDB (first run downloads mongod) |
+| `npm run ci` | lint, typecheck, test, build in the same order as GitHub Actions |
 
-Known state after PR (a): `npm run lint` reports 8 pre-existing unused-import errors in `apps/web`; they are removed in the TypeScript port, not patched here.
+Tests: every route gets a happy-path test, a validation test, an auth-required test, and an ownership test (user A cannot touch user B's rows). Add to `apps/api/test/`; `helpers.ts` gives you `makeApp()`, `signup()`, and `auth(token)`.
 
 ## Conventions
 

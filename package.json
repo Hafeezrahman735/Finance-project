@@ -17,7 +17,8 @@
     "build": "npm run build --workspace @ledgeriq/web",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "ci": "npm run lint && npm run test && npm run build"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "ci": "npm run lint && npm run typecheck && npm run test && npm run build"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

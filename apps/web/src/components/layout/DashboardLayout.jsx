@@ -1,4 +1,4 @@
-import React, { Children, useContext, useState, useEffect } from 'react';
+import React, { useContext, useState } from 'react';
 import { UserContext } from '../../context/userContent';
 import Navbar from '../../components/layout/Navbar';
 import Sidebar from '../../components/layout/Sidebar';

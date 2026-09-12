@@ -15,9 +15,8 @@ logs
 *.log
 npm-debug.log*
 
-# Generated Excel exports
-apps/api/*.xlsx
-apps/api/uploads/
+# Build output of the API
+apps/api/dist/
 
 # Editor / OS
 .vscode/*

@@ -12,7 +12,7 @@ const SignUp = () => {
     const [email, setEmail] = useState()
     const [password, setPassword] = useState()
 
-    const [error, setError] = useState();
+    const [error, setError] = useState(null);
     const {updateUser} = useContext(UserContext);
     const navigate = useNavigate();
 
@@ -83,6 +83,7 @@ const SignUp = () => {
             </label>
             <input type='password' placeholder='Enter Password' autoComplete='off' name="Password" className='input-field' onChange={(e) => setPassword(e.target.value)}></input>
           </div>
+          {error && <div className='error-message'>{error}</div>}
           <button type='submit' className='button'>Register</button>
         </form>
         <div className='link-login'>
