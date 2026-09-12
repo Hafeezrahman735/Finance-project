@@ -2,8 +2,7 @@ import React, {useEffect, useState } from 'react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { useUserAuth } from '../../hooks/useUserAuth';
 import { useNavigate } from 'react-router-dom';
-import { API_PATHS } from '../../utils/apiPaths';
-import axiosInstance from '../../utils/axiosinstance';
+import { getDashboard } from '../../utils/api';
 import InfoCard from '../../components/Cards/InfoCard';
 import { LuHandCoins, LuWalletMinimal } from 'react-icons/lu';
 import {IoMdCard} from 'react-icons/io';
@@ -27,13 +26,7 @@ const Home = () => {
     setLoading(true);
 
     try {
-      const response = await axiosInstance.get(
-        `${API_PATHS.DASHBOARD.GET_DATA}`
-      );
-
-      if (response.data) {
-        setDashboardData(response.data);
-      }
+      setDashboardData(await getDashboard());
     } catch (error) {
       console.log("Something went wrong. please try again", error)
     } finally {

@@ -2,28 +2,27 @@
 
 Two views: what runs today, and the target the roadmap builds toward. Decisions behind the target are recorded in `docs/adr/`.
 
-## Today (Slice 1, PR c)
+## Today (Slice 1, PR d)
 
 ```
   apps/web (React 19 + Vite)                      apps/api (Express 5, TypeScript, ESM)
-  ┌────────────────────────────┐  /api (proxy)  ┌────────────────────────────────────────────────┐   ┌──────────┐
-  │ pages: Login, SignUp, Home │ ─────────────▶ │ app.ts: requestLogger ─▶ cors ─▶ json           │──▶│ MongoDB  │
-  │        Income, Expense     │                │   ─▶ routes.ts (validateBody ─▶ protect ─▶      │   │ (Atlas;  │
-  │ context/UserContext        │                │        controllers/{auth,transactions,dashboard})│   │ in-memory│
-  │ utils/axiosinstance (token,│                │   ─▶ notFoundHandler ─▶ errorHandler (envelope) │   │ in tests)│
-  │        401 → /login)       │                │ config.ts (zod, tiered) · lib/{logger,errors,excel}│ └──────────┘
-  └────────────────────────────┘                │ models: User (+DTO), Income, Expense             │
-  packages/shared: money (minor units) + dates  └────────────────────────────────────────────────┘
-                                                  services/ledger (post · reverse · recategorize ·   ┌──────────┐
-                                                    lock · trial balance) ─▶ Prisma 7 ─▶            │ Postgres │
-                                                  prisma/schema.prisma + migration with triggers    │ (ledger) │
-                                                  fixtures/demoOrg · scripts/migrate-mongo-to-pg    └──────────┘
-  test/: 43 API tests (Supertest on in-memory Mongo; ledger + property tests on TEST_DATABASE_URL) + 25 shared tests
+  ┌────────────────────────────┐  /api (proxy)  ┌──────────────────────────────────────────────────┐
+  │ pages: Login, SignUp, Home │ ─────────────▶ │ app.ts: requestLogger ─▶ cors ─▶ json             │
+  │        Income, Expense     │                │   ─▶ routes.ts (route TABLE: access per route)    │
+  │ utils/api.js (adapter:     │                │        protect ─▶ requireOrg(role) ─▶ validate    │
+  │   minor units → legacy     │                │        ─▶ services/{auth,transactions,dashboard}  │
+  │   rows for today's pages)  │                │   ─▶ notFoundHandler ─▶ errorHandler (envelope)   │
+  └────────────────────────────┘                │ services/ledger (post · reverse · recategorize ·  │   ┌──────────┐
+  packages/shared: money (minor units) + dates  │   lock · trial balance) ─▶ Prisma 7 (pg adapter) ─┼──▶│ Postgres │
+                                                │ prisma/schema.prisma + migration with triggers    │   └──────────┘
+                                                │ fixtures/demoOrg · scripts/migrate-mongo-to-pg    │
+                                                └──────────────────────────────────────────────────┘
+  test/: 40 API tests on TEST_DATABASE_URL (auth, transactions, dashboard, ledger, properties, generated authz matrix) + 25 shared tests
 ```
 
-The two databases coexist until PR (d): the legacy routes still read and write Mongo; the ledger, organizations, and audit log are in Postgres. `docs/ledger.md` explains the ledger rules.
+MongoDB is gone from the runtime; `mongoose` remains a dev dependency for the one-time migration script. `docs/ledger.md` explains the ledger rules; `docs/api.md` lists every route.
 
-Fixed in the port: owner filter on every update/delete; user DTOs (no password hash in any response); `timestamps` typo; Excel export streamed to the response with a formula-injection guard; API base URL from `VITE_API_URL` (empty by default, Vite proxies `/api`); the income delete route the web app calls but the old API never served. Still pending for the Prisma PR: float amounts (ADR 0002), wall-clock date windows, and the route naming conventions below.
+Still pending for the Slice 1 lanes: refresh tokens, password reset, email verification (auth lane); the Transactions page and design tokens (1.3); CSV import and Plaid sandbox (1.4); metrics + Overview (E1); the weekly brief (E8).
 
 ## Target
 
@@ -83,8 +82,8 @@ Slice 1 lands in four revertible PRs, then feature lanes:
 |---|---|
 | (a) done | Workspaces, docs, ADRs, no behavior change |
 | (b) done | TypeScript port of `apps/api`, still on Mongo; lint clean; Vitest + Supertest; GitHub Actions CI |
-| (c) this PR | Prisma 7 schema + migration with DB-enforced ledger invariants, ledger service, shared money/date helpers, demo organization seed, Mongo → Postgres migration script with dry run and verification |
-| (d) | Cut over to Postgres; remove Mongoose |
+| (c) done | Prisma 7 schema + migration with DB-enforced ledger invariants, ledger service, shared money/date helpers, demo organization seed, Mongo → Postgres migration script with dry run and verification |
+| (d) this PR | Auth on Postgres (org per signup), org/role middleware, REST routes from a route table, generated authz matrix, dashboard from the ledger, Mongoose removed, web adapter |
 | then | auth + organizations · Transactions UI · CSV import · Plaid sandbox · metrics + Overview · weekly brief |
 
 The full plan with review history: the owner's plan file referenced in `TODOS.md`.

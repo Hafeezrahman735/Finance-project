@@ -2,10 +2,12 @@ import pino from "pino";
 import request from "supertest";
 import { createApp } from "../src/app.js";
 import type { Config } from "../src/config.js";
+import type { Db } from "../src/db/prisma.js";
+import { MembershipRole } from "../src/generated/prisma/enums.js";
 
 export const testConfig: Config = {
   NODE_ENV: "test",
-  MONGO_URL: "unused-in-tests",
+  DATABASE_URL: "unused-in-tests (see test/pg.ts)",
   JWT_SECRET: "test-secret-at-least-16-chars",
   JWT_EXPIRES_IN: "1h",
   PORT: 0,
@@ -13,16 +15,32 @@ export const testConfig: Config = {
   LOG_LEVEL: "silent",
 };
 
-export function makeApp(config: Partial<Config> = {}) {
-  return createApp({ ...testConfig, ...config }, pino({ level: "silent" }));
+export function makeApp(db: Db, config: Partial<Config> = {}) {
+  return createApp(db, { ...testConfig, ...config }, pino({ level: "silent" }));
 }
 
-export async function signup(app: ReturnType<typeof makeApp>, email = "owner@example.com") {
+export interface Session {
+  token: string;
+  user: { id: string; email: string; fullName: string };
+  organization: { id: string; name: string; currency: string; timezone: string; role: MembershipRole };
+}
+
+export async function signup(app: ReturnType<typeof makeApp>, email = `owner-${Math.random().toString(36).slice(2, 8)}@example.com`, organizationName?: string): Promise<Session> {
   const res = await request(app)
     .post("/api/v1/auth/register")
-    .send({ fullName: "Owner One", email, password: "correct-horse-battery" });
+    .send({ fullName: "Owner One", email, password: "correct-horse-battery", ...(organizationName ? { organizationName } : {}), timezone: "America/Chicago" });
   if (res.status !== 201) throw new Error(`signup failed: ${res.status} ${JSON.stringify(res.body)}`);
-  return { token: res.body.token as string, user: res.body.user as { id: string; email: string } };
+  return res.body as Session;
 }
 
-export const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
+/** Adds a second user to `session`'s organization with `role` and returns their session. */
+export async function invite(app: ReturnType<typeof makeApp>, db: Db, session: Session, role: MembershipRole): Promise<Session> {
+  const member = await signup(app, `member-${role.toLowerCase()}-${Math.random().toString(36).slice(2, 6)}@example.com`);
+  await db.membership.create({ data: { organizationId: session.organization.id, userId: member.user.id, role } });
+  return { ...member, organization: { ...session.organization, role } };
+}
+
+export const auth = (session: Session | string, organizationId?: string) => ({
+  Authorization: `Bearer ${typeof session === "string" ? session : session.token}`,
+  ...(organizationId ? { "X-Organization-Id": organizationId } : typeof session !== "string" ? { "X-Organization-Id": session.organization.id } : {}),
+});

@@ -1,6 +1,6 @@
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
-import { connectDB } from "./db.js";
+import { createPrisma } from "./db/prisma.js";
 import { createLogger } from "./lib/logger.js";
 
 let config;
@@ -13,15 +13,16 @@ try {
 
 const logger = createLogger(config.LOG_LEVEL, config.NODE_ENV === "development");
 
+const db = createPrisma(config.DATABASE_URL);
 try {
-  await connectDB(config.MONGO_URL);
-  logger.info("MongoDB connected");
+  await db.$queryRaw`SELECT 1`;
+  logger.info("Postgres connected");
 } catch (err) {
-  logger.error({ err }, "Could not connect to MongoDB. Check MONGO_URL and the Atlas IP allowlist (docs/setup.md#troubleshooting).");
+  logger.error({ err }, "Could not connect to Postgres. Check DATABASE_URL and that the server is running (docs/setup.md#troubleshooting).");
   process.exit(1);
 }
 
-const app = createApp(config, logger);
+const app = createApp(db, config, logger);
 const server = app.listen(config.PORT, () => {
   logger.info({ port: config.PORT }, `server running on port ${config.PORT}`);
 });
@@ -29,6 +30,8 @@ const server = app.listen(config.PORT, () => {
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
     logger.info({ signal }, "shutting down");
-    server.close(() => process.exit(0));
+    server.close(() => {
+      void db.$disconnect().finally(() => process.exit(0));
+    });
   });
 }

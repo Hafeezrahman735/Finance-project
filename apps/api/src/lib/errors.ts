@@ -9,7 +9,7 @@ import { ZodError } from "zod";
  * `message` is kept at the top level because the current web app reads
  * `error.response.data.message`; new client code switches on `error.code`.
  */
-export type ErrorType = "validation_error" | "authentication_error" | "not_found" | "conflict" | "internal_error";
+export type ErrorType = "validation_error" | "authentication_error" | "permission_error" | "not_found" | "conflict" | "internal_error";
 
 export class AppError extends Error {
   constructor(
@@ -33,6 +33,12 @@ export class ValidationError extends AppError {
 export class AuthenticationError extends AppError {
   constructor(message = "Not authorized", code = "unauthorized") {
     super(401, "authentication_error", code, message);
+  }
+}
+
+export class ForbiddenError extends AppError {
+  constructor(message = "You do not have permission to do that", code = "forbidden") {
+    super(403, "permission_error", code, message);
   }
 }
 

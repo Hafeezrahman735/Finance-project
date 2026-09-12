@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import DashboardLayout from '../../components/layout/DashboardLayout';
-import axiosInstance from '../../utils/axiosinstance';
+import { createTransaction, deleteTransaction, downloadExport, listTransactions, updateTransaction } from '../../utils/api';
 import toast from 'react-hot-toast';
 import ExpenseOverview from '../../components/Expense/ExpenseOverview';
-import { API_PATHS } from '../../utils/apiPaths';
 import Modal from '../../components/Modal';
 import ExpenseList from '../../components/Expense/ExpenseList';
 import AddExpenseForm from '../../components/Expense/AddExpenseForm';
@@ -29,13 +28,7 @@ const Expense = () => {
     setloading(true);
 
     try {
-      const response = await axiosInstance.get(
-        `${API_PATHS.EXPENSE.GET_ALL_EXPENSE}`
-      );
-
-      if (response.data) {
-        setExpenseData(response.data);
-      }
+      setExpenseData(await listTransactions("out"));
     }catch (error) {
       console.log("Something went wrong. Please try again", error)
     } finally {
@@ -44,7 +37,7 @@ const Expense = () => {
     };
 
   const handleAddExpense = async (Expense) => {
-    const {category, amount, date, icon} = Expense
+    const {category, amount, date} = Expense
 
     if (!category.trim()) {
       toast.error("Category not working");
@@ -62,12 +55,7 @@ const Expense = () => {
     }
 
     try {
-      await axiosInstance.post(API_PATHS.EXPENSE.ADD_EXPENSE, {
-        category,
-        amount,
-        date,
-        icon
-      });
+      await createTransaction({ direction: "out", amount, date, category });
       setOpenAddExpenseModal(false);
       toast.success("Expense Added");
       fetchExpenseDetails();
@@ -78,7 +66,7 @@ const Expense = () => {
 
   const deleteExpense = async (id) => {
     try {
-      await axiosInstance.delete(API_PATHS.EXPENSE.DELETE_EXPENSE(id))
+      await deleteTransaction(id)
       setOpenDeleteAlert({show:false, data: null});
       toast.success("Expense information deleted successfully");
       fetchExpenseDetails();
@@ -92,7 +80,7 @@ const Expense = () => {
 
   const editExpense = async (expense) => {
     try{
-      await axiosInstance.patch(API_PATHS.EXPENSE.EDIT_EXPENSE(expense._id),expense);
+      await updateTransaction(expense._id, expense.version, { amount: expense.amount, date: expense.date, memo: expense.category });
       setEditExpenseModal(false);
       toast.success("Updated Expense")
       fetchExpenseDetails();
@@ -105,7 +93,13 @@ const Expense = () => {
 
   };
 
-  const handleDownloadExpenseDetails = async () => {};
+  const handleDownloadExpenseDetails = async () => {
+    try {
+      await downloadExport("out");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Download failed");
+    }
+  };
 
 
   useEffect(() => {

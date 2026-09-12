@@ -5,6 +5,7 @@ const EditExpenseform = ({expense, onEdit}) => {
 
   const [formdata,setformdata] = useState({
     _id: expense._id || "",
+    version: expense.version,
     category: expense.category || "",
     amount: expense.amount || "",
     date: expense.date || ""
@@ -16,6 +17,7 @@ const EditExpenseform = ({expense, onEdit}) => {
     if (expense) {
       setformdata({
         _id: expense._id,
+        version: expense.version,
         category: expense.category,
         amount: expense.amount,
         date: expense.date?.split("T")[0]

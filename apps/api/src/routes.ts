@@ -1,49 +1,139 @@
-import { Router } from "express";
+import { Router, type Request, type RequestHandler, type Response } from "express";
+import { z } from "zod";
 import type { Config } from "./config.js";
-import { authController, loginSchema, registerSchema } from "./controllers/auth.js";
-import { getDashboard } from "./controllers/dashboard.js";
-import { expensePatchSchema, expenseSchema, incomePatchSchema, incomeSchema, transactionsController } from "./controllers/transactions.js";
-import { protect } from "./middleware/auth.js";
-import { validateBody } from "./middleware/validate.js";
+import type { Db } from "./db/prisma.js";
+import { MembershipRole } from "./generated/prisma/enums.js";
+import { sendWorkbook } from "./lib/excel.js";
+import { protect, requireOrg } from "./middleware/auth.js";
+import { body, validateBody } from "./middleware/validate.js";
+import { authService, loginSchema, registerSchema, toUserDTO } from "./services/auth/auth.js";
+import { dashboardService } from "./services/dashboard/dashboard.js";
+import { createSchema, listQuerySchema, transactionsService, updateSchema } from "./services/transactions/transactions.js";
 
 /**
- * Route table. Paths are the ORIGINAL tutorial paths so the web app keeps
- * working unchanged in this PR; the REST conventions in docs/architecture.md
- * (plural nouns, sub-resource actions, cursor lists) arrive with the Prisma
- * PR together with the new Transactions page.
+ * Route table for /api/v1 (docs/architecture.md conventions: plural nouns,
+ * actions as sub-resources, camelCase JSON, {data, nextCursor} lists).
  *
- * Two compatibility fixes: DELETE /income/:id is added because the web app
- * calls it (the old API only had /income/delete/:id, so income delete was
- * broken), and the Excel routes are registered in both casings the web app
- * uses.
+ * `access` is what the generated authz matrix (test/authz.test.ts) checks:
+ *   public            no token needed
+ *   auth              any signed-in user
+ *   <MembershipRole>  signed-in member of the active organization with at least this role
+ *
+ * Adding a route here is what puts it under test; a route that is not in this
+ * table does not exist.
  */
-export function buildRouter(config: Config): Router {
-  const auth = authController(config);
-  const income = transactionsController("income");
-  const expense = transactionsController("expense");
-  const guard = protect(config.JWT_SECRET);
+export type Access = "public" | "auth" | MembershipRole;
 
+export interface RouteDef {
+  method: "get" | "post" | "patch" | "delete";
+  path: string;
+  access: Access;
+  /** Example path params for the authz matrix (a syntactically valid but foreign id). */
+  example?: string;
+  handler: RequestHandler;
+}
+
+const actor = (req: Request) => ({ userId: req.user?.id ?? null, requestId: req.id });
+
+export function routeTable(db: Db, config: Config): RouteDef[] {
+  const auth = authService(db, config);
+  const txns = transactionsService(db);
+  const dashboard = dashboardService(db);
+  const FOREIGN = "00000000-0000-4000-8000-000000000000";
+
+  const orgDTO = (req: Request) => ({ id: req.org!.id, name: req.org!.name, currency: req.org!.currency, timezone: req.org!.timezone, role: req.org!.role });
+
+  return [
+    // --- auth -------------------------------------------------------------
+    { method: "post", path: "/auth/register", access: "public", handler: chain(validateBody(registerSchema), async (req, res) => res.status(201).json(await auth.register(body<typeof registerSchema>(req)))) },
+    { method: "post", path: "/auth/login", access: "public", handler: chain(validateBody(loginSchema), async (req, res) => res.json(await auth.login(body<typeof loginSchema>(req)))) },
+    { method: "get", path: "/auth/me", access: "auth", handler: async (req, res) => res.json({ user: toUserDTO(req.user!), organization: await auth.primaryOrganization(req.user!.id) }) },
+
+    // --- organizations ----------------------------------------------------
+    {
+      method: "get",
+      path: "/organizations",
+      access: "auth",
+      handler: async (req, res) => {
+        const memberships = await db.membership.findMany({ where: { userId: req.user!.id }, include: { organization: true }, orderBy: { createdAt: "asc" } });
+        res.json({ data: memberships.map((m) => ({ id: m.organization.id, name: m.organization.name, currency: m.organization.currency, timezone: m.organization.timezone, role: m.role })) });
+      },
+    },
+    { method: "get", path: "/organizations/current", access: MembershipRole.VIEWER, handler: (req, res) => res.json(orgDTO(req)) },
+
+    // --- accounts (chart) -------------------------------------------------
+    { method: "get", path: "/accounts", access: MembershipRole.VIEWER, handler: async (req, res) => res.json({ data: await txns.accounts(req.org!.id) }) },
+
+    // --- dashboard --------------------------------------------------------
+    { method: "get", path: "/dashboard", access: MembershipRole.VIEWER, handler: async (req, res) => res.json(await dashboard.get(req.org!.id, req.org!.currency, req.org!.timezone)) },
+
+    // --- transactions -----------------------------------------------------
+    { method: "get", path: "/transactions", access: MembershipRole.VIEWER, handler: async (req, res) => res.json(await txns.list(req.org!.id, listQuerySchema.parse(req.query))) },
+    {
+      method: "get",
+      path: "/transactions/export.xlsx",
+      access: MembershipRole.VIEWER,
+      handler: async (req, res) => {
+        const q = listQuerySchema.parse({ ...req.query, limit: 200 });
+        const rows: Record<string, unknown>[] = [];
+        let cursor: string | null = null;
+        do {
+          const page = await txns.list(req.org!.id, { ...q, cursor: cursor ?? undefined });
+          for (const t of page.data) rows.push({ date: t.date, memo: t.memo, direction: t.direction === "in" ? "Money in" : "Money out", category: t.categoryName, amount: t.amountMinor / 100, account: t.bankAccount.name });
+          cursor = page.nextCursor;
+        } while (cursor && rows.length < 50_000);
+        await sendWorkbook(res, `transactions-${q.direction ?? "all"}.xlsx`, "Transactions", [
+          { header: "Date", key: "date", width: 12 },
+          { header: "Description", key: "memo", width: 32 },
+          { header: "Direction", key: "direction", width: 12 },
+          { header: "Category", key: "category", width: 24 },
+          { header: `Amount (${req.org!.currency})`, key: "amount", width: 14 },
+          { header: "Account", key: "account", width: 20 },
+        ], rows);
+      },
+    },
+    { method: "post", path: "/transactions", access: MembershipRole.BOOKKEEPER, handler: chain(validateBody(createSchema), async (req, res) => res.status(201).json(await txns.create(req.org!.id, body<typeof createSchema>(req), actor(req)))) },
+    { method: "get", path: "/transactions/:id", access: MembershipRole.VIEWER, example: FOREIGN, handler: async (req, res) => res.json(await txns.get(req.org!.id, param(req, "id"))) },
+    { method: "patch", path: "/transactions/:id", access: MembershipRole.BOOKKEEPER, example: FOREIGN, handler: chain(validateBody(updateSchema), async (req, res) => res.json(await txns.update(req.org!.id, param(req, "id"), body<typeof updateSchema>(req), actor(req)))) },
+    { method: "post", path: "/transactions/:id/reverse", access: MembershipRole.BOOKKEEPER, example: FOREIGN, handler: async (req, res) => res.json(await txns.reverse(req.org!.id, param(req, "id"), actor(req))) },
+    // DELETE is an alias for reverse: posted entries never disappear (ADR 0004).
+    { method: "delete", path: "/transactions/:id", access: MembershipRole.BOOKKEEPER, example: FOREIGN, handler: async (req, res) => res.json({ message: "Transaction reversed", ...(await txns.reverse(req.org!.id, param(req, "id"), actor(req))) }) },
+  ];
+}
+
+export function buildRouter(db: Db, config: Config): Router {
+  const auth = authService(db, config);
   const router = Router();
-
-  router.post("/auth/register", validateBody(registerSchema), auth.register);
-  router.post("/auth/login", validateBody(loginSchema), auth.login);
-  router.get("/auth/getUser", guard, auth.me);
-
-  router.get("/dashboard", guard, getDashboard);
-
-  router.post("/income/addIncome", guard, validateBody(incomeSchema), income.create);
-  router.get("/income/getIncome", guard, income.list);
-  router.patch("/income/updateIncome/:id", guard, validateBody(incomePatchSchema), income.update);
-  router.delete("/income/delete/:id", guard, income.remove);
-  router.get("/income/downloadexcel", guard, income.downloadExcel);
-  router.delete("/income/:id", guard, income.remove);
-
-  router.post("/expense/addExpense", guard, validateBody(expenseSchema), expense.create);
-  router.get("/expense/get", guard, expense.list);
-  router.patch("/expense/updateExpense/:id", guard, validateBody(expensePatchSchema), expense.update);
-  router.get("/expense/downloadexcel", guard, expense.downloadExcel);
-  router.get("/expense/downloadExcel", guard, expense.downloadExcel);
-  router.delete("/expense/:id", guard, expense.remove);
-
+  for (const route of routeTable(db, config)) {
+    const guards: RequestHandler[] = [];
+    if (route.access !== "public") guards.push(protect(auth));
+    if (route.access !== "public" && route.access !== "auth") guards.push(requireOrg(db, auth, route.access));
+    router[route.method](route.path, ...guards, route.handler);
+  }
   return router;
+}
+
+const uuid = z.string().uuid();
+function param(req: Request, name: string): string {
+  const value = req.params[name];
+  const parsed = uuid.safeParse(value);
+  if (!parsed.success) {
+    // A malformed id can never exist; answer like a foreign id would (404), not 400.
+    return "00000000-0000-0000-0000-000000000000";
+  }
+  return parsed.data;
+}
+
+/** Runs middleware then the handler as one RequestHandler (keeps the table flat). */
+function chain(mw: RequestHandler, handler: (req: Request, res: Response) => Promise<unknown>): RequestHandler {
+  return (req, res, next) => {
+    try {
+      mw(req, res, (err?: unknown) => {
+        if (err) return next(err);
+        handler(req, res).catch(next);
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
 }

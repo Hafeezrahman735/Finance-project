@@ -5,8 +5,7 @@ Target: clone to running app in under 5 minutes. Time yourself; if it takes long
 ## 1. Prerequisites
 
 - Node.js 20 or newer (`node --version`), npm 10 or newer.
-- PostgreSQL 15 or newer, reachable via a connection string (section 2).
-- Until the cut-over PR, also a MongoDB connection string: the current API still serves the old routes from Mongo while the ledger lives in Postgres. A free MongoDB Atlas cluster works.
+- PostgreSQL 15 or newer, reachable via a connection string (section 2). That is the only database.
 - Windows, macOS, and Linux are all supported. On Windows, Git Bash or PowerShell both work; the repo pins LF line endings via `.gitattributes`.
 
 ## 2. Postgres
@@ -47,7 +46,7 @@ cp apps/api/.env.example apps/api/.env
 |---|---|---|---|
 | `DATABASE_URL` | yes | — | Postgres, e.g. `postgresql://ledgeriq:ledgeriq@localhost:5432/ledgeriq` |
 | `TEST_DATABASE_URL` | for `npm run test` | — | A separate database; it is truncated by the tests |
-| `MONGO_URL` | yes (until cut-over) | — | Atlas connection string, e.g. `mongodb+srv://user:pass@cluster.mongodb.net/ledgeriq` |
+| `MONGO_URL` | no | — | Only for the one-time `migrate:mongo` import of Expense Tracker data |
 | `JWT_SECRET` | yes | — | Any long random string (`openssl rand -hex 32`) |
 | `PORT` | no | `8000` | The Vite dev server proxies `/api` to `http://localhost:8000` (`apps/web/vite.config.js`), so the app is same-origin in development. Change both if you change one. |
 | `CLIENT_URL` | no | none | CORS allowlist for a separately hosted web app only. With the proxy, leave unset. |
@@ -62,7 +61,7 @@ The API validates its configuration at boot and prints one line per problem, e.g
 npm run setup      # prisma migrate deploy + seed the demo organization
 ```
 
-The seed creates "Sunny Side Studio" with 90 days of product-brand activity and prints the demo login (`demo@ledgeriq.local` / `demo-ledgeriq`). Re-running rebuilds it. The demo login works once the cut-over PR moves auth to Postgres; today it exercises the ledger only.
+The seed creates "Sunny Side Studio" with 90 days of product-brand activity and prints the demo login (`demo@ledgeriq.local` / `demo-ledgeriq`). Re-running rebuilds it. Log in with it at `http://localhost:5173` after `npm run dev`.
 
 Bringing your Expense Tracker data across: `npm run migrate:mongo -w @ledgeriq/api -- --dry-run` prints a per-user report without writing; drop `--dry-run` to commit. Details in `docs/ledger.md`.
 
@@ -73,17 +72,17 @@ npm run dev
 ```
 
 This starts both processes with prefixed output:
-- `api` — `tsx watch apps/api/src/server.ts`, prints `MongoDB connected` and `server running on port 8000`
+- `api` — `tsx watch apps/api/src/server.ts`, prints `Postgres connected` and `server running on port 8000`
 - `web` — Vite dev server, prints a `http://localhost:5173` URL
 
-Open the URL, sign up, add an income and an expense, and the dashboard should show totals and charts. `http://localhost:5173/healthz` returns `{"ok":true}` through the proxy.
+Open the URL and log in as the demo user (or sign up: one screen creates your organization and chart of accounts). Add an income and an expense; the dashboard reads from the ledger. `http://localhost:5173/healthz` returns `{"ok":true}` through the proxy.
 
 Run one side only with `npm run dev:api` or `npm run dev:web`.
 
 ## 7. Verify
 
 - `npm run ci` runs lint, typecheck, test, and build in the same order as GitHub Actions.
-- `npm run test` runs the shared-package tests and the API suite. Ledger tests use `TEST_DATABASE_URL` (migrations are applied automatically; suites skip with a warning if it is unset). Legacy route tests use an in-memory MongoDB: the first run downloads a ~600 MB mongod binary into `~/.cache/mongodb-binaries`; later runs take about a minute. No Atlas cluster is needed for tests.
+- `npm run test` runs the shared-package tests and the API suite against `TEST_DATABASE_URL` (migrations are applied automatically; suites skip with a warning if it is unset). Takes about a minute. Every route is covered by the generated authz matrix (`apps/api/test/authz.test.ts`).
 - `npx prisma studio -w @ledgeriq/api` (or `npm run db:studio -w @ledgeriq/api`) opens a browser UI over the ledger tables.
 - `npm run lint` and `npm run typecheck` must be clean; `apps/web` has 5 `react-hooks/exhaustive-deps` warnings that are addressed when those pages are rewritten.
 
@@ -99,4 +98,4 @@ Run one side only with `npm run dev:api` or `npm run dev:web`.
 
 ## What changes next
 
-The cut-over PR (d) moves auth and the API routes onto Postgres and removes `MONGO_URL`; later Slice 1 lanes add Plaid, Anthropic, and Resend as optional keys whose features switch off when absent.
+The Slice 1 feature lanes add Plaid, Anthropic, and Resend as optional keys whose features switch off when absent, plus the Transactions page, CSV import, the Overview metrics, and the weekly brief (`docs/architecture.md`).

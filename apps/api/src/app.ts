@@ -2,6 +2,7 @@ import cors from "cors";
 import express, { type Express } from "express";
 import type { Logger } from "pino";
 import type { Config } from "./config.js";
+import type { Db } from "./db/prisma.js";
 import { errorHandler, notFoundHandler } from "./lib/errors.js";
 import { requestLogger } from "./lib/logger.js";
 import { buildRouter } from "./routes.js";
@@ -14,10 +15,10 @@ import { buildRouter } from "./routes.js";
  *           ─▶ notFoundHandler (unmatched)
  *           ─▶ errorHandler (AppError | ZodError | parse error | unknown → envelope)
  *
- * Built as a factory so tests can spin up an app against an in-memory Mongo
+ * Built as a factory so tests can spin up an app against the test Postgres
  * with their own config, without touching process.env or listening on a port.
  */
-export function createApp(config: Config, logger: Logger): Express {
+export function createApp(db: Db, config: Config, logger: Logger): Express {
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", 1);
@@ -35,10 +36,11 @@ export function createApp(config: Config, logger: Logger): Express {
   );
   app.use(express.json({ limit: "1mb" }));
 
-  app.get("/healthz", (_req, res) => {
+  app.get("/healthz", async (_req, res) => {
+    await db.$queryRaw`SELECT 1`;
     res.json({ ok: true });
   });
-  app.use("/api/v1", buildRouter(config));
+  app.use("/api/v1", buildRouter(db, config));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

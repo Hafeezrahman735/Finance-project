@@ -1,32 +1,10 @@
 import type { Response as SuperAgentResponse } from "superagent";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
-import { auth, makeApp, signup } from "./helpers.js";
+import { auth, makeApp, signup, type Session } from "./helpers.js";
+import { describePg, usePg } from "./pg.js";
 
-const app = makeApp();
-
-const kinds = [
-  {
-    kind: "income",
-    label: "source",
-    add: "/api/v1/income/addIncome",
-    list: "/api/v1/income/getIncome",
-    excel: "/api/v1/income/downloadexcel",
-    update: (id: string) => `/api/v1/income/updateIncome/${id}`,
-    del: (id: string) => `/api/v1/income/${id}`,
-    delLegacy: (id: string) => `/api/v1/income/delete/${id}`,
-  },
-  {
-    kind: "expense",
-    label: "category",
-    add: "/api/v1/expense/addExpense",
-    list: "/api/v1/expense/get",
-    excel: "/api/v1/expense/downloadExcel",
-    update: (id: string) => `/api/v1/expense/updateExpense/${id}`,
-    del: (id: string) => `/api/v1/expense/${id}`,
-    delLegacy: null,
-  },
-] as const;
+const run = describePg() ? describe : describe.skip;
 
 const collect = (r: SuperAgentResponse, cb: (err: Error | null, body: Buffer) => void) => {
   const chunks: Buffer[] = [];
@@ -34,86 +12,133 @@ const collect = (r: SuperAgentResponse, cb: (err: Error | null, body: Buffer) =>
   r.on("end", () => cb(null, Buffer.concat(chunks)));
 };
 
-describe.each(kinds)("$kind", (k) => {
-  const payload = (over: Record<string, unknown> = {}) => ({ [k.label]: "Consulting", amount: 1250.5, date: "2026-09-01", icon: "briefcase", ...over });
+run("transactions API", () => {
+  const db = usePg();
+  const app = () => makeApp(db());
 
-  it("creates, lists (newest first), updates, and deletes for the owner", async () => {
-    const { token } = await signup(app);
-    const a = await request(app).post(k.add).set(auth(token)).send(payload({ date: "2026-08-01" }));
-    const b = await request(app).post(k.add).set(auth(token)).send(payload({ date: "2026-09-01" }));
+  async function accountId(s: Session, systemKey: string): Promise<string> {
+    const res = await request(app()).get("/api/v1/accounts").set(auth(s));
+    return res.body.data.find((a: { systemKey: string }) => a.systemKey === systemKey).id;
+  }
+
+  async function add(s: Session, body: Record<string, unknown>) {
+    const res = await request(app()).post("/api/v1/transactions").set(auth(s)).send({ direction: "out", amountMinor: 1250, date: "2026-09-01", memo: "Coffee", ...body });
+    return res;
+  }
+
+  it("creates money in / out against Cash, lists newest first with a cursor, and exposes the view shape", async () => {
+    const s = await signup(app());
+    const a = await add(s, { direction: "in", amountMinor: 50000, date: "2026-08-01", memo: "Invoice 1", accountId: await accountId(s, "sales") });
+    const b = await add(s, { amountMinor: 1250, date: "2026-09-01", memo: "Coffee" });
     expect(a.status).toBe(201);
     expect(b.status).toBe(201);
+    expect(b.body).toMatchObject({ direction: "out", amountMinor: 1250, currency: "USD", categoryName: "Uncategorized", uncategorized: true, status: "POSTED", locked: false, version: 1, source: "MANUAL" });
+    expect(b.body.bankAccount.name).toBe("Cash");
+    expect(a.body).toMatchObject({ direction: "in", categoryName: "Sales", uncategorized: false });
 
-    const list = await request(app).get(k.list).set(auth(token));
-    expect(list.status).toBe(200);
-    expect(list.body.map((r: { _id: string }) => r._id)).toEqual([b.body._id, a.body._id]);
+    const page1 = await request(app()).get("/api/v1/transactions?limit=1").set(auth(s));
+    expect(page1.status).toBe(200);
+    expect(page1.body.data.map((t: { id: string }) => t.id)).toEqual([b.body.id]);
+    expect(page1.body.nextCursor).toBeTypeOf("string");
+    const page2 = await request(app()).get(`/api/v1/transactions?limit=1&cursor=${page1.body.nextCursor}`).set(auth(s));
+    expect(page2.body.data.map((t: { id: string }) => t.id)).toEqual([a.body.id]);
+    expect(page2.body.nextCursor).toBeNull();
 
-    const upd = await request(app).patch(k.update(a.body._id)).set(auth(token)).send({ amount: 99 });
-    expect(upd.status).toBe(200);
-    expect(upd.body.amount).toBe(99);
+    const onlyIn = await request(app()).get("/api/v1/transactions?direction=in").set(auth(s));
+    expect(onlyIn.body.data).toHaveLength(1);
+    const queue = await request(app()).get("/api/v1/transactions?status=uncategorized").set(auth(s));
+    expect(queue.body.data.map((t: { id: string }) => t.id)).toEqual([b.body.id]);
+    const august = await request(app()).get("/api/v1/transactions?from=2026-08-01&to=2026-08-31").set(auth(s));
+    expect(august.body.data).toHaveLength(1);
+  });
 
-    const del = await request(app).delete(k.del(a.body._id)).set(auth(token));
+  it("validates input: amount must be a positive integer of minor units, date must be a calendar date", async () => {
+    const s = await signup(app());
+    expect((await add(s, { amountMinor: 0 })).body.error.param).toBe("amountMinor");
+    expect((await add(s, { amountMinor: 12.5 })).body.error.param).toBe("amountMinor");
+    expect((await add(s, { date: "09/01/2026" })).body.error.param).toBe("date");
+    expect((await add(s, { direction: "sideways" })).body.error.param).toBe("direction");
+  });
+
+  it("recategorizes and splits via PATCH with the version, and refuses stale versions", async () => {
+    const s = await signup(app());
+    const t = (await add(s, { amountMinor: 10000 })).body;
+    const software = await accountId(s, "software");
+    const rent = await accountId(s, "rent");
+
+    const one = await request(app()).patch(`/api/v1/transactions/${t.id}`).set(auth(s)).send({ version: 1, lines: [{ accountId: software, amountMinor: 10000 }] });
+    expect(one.status).toBe(200);
+    expect(one.body).toMatchObject({ id: t.id, version: 2, categoryName: "Software and subscriptions", uncategorized: false });
+
+    const split = await request(app()).patch(`/api/v1/transactions/${t.id}`).set(auth(s)).send({ version: 2, lines: [{ accountId: software, amountMinor: 4000 }, { accountId: rent, amountMinor: 6000 }] });
+    expect(split.status).toBe(200);
+    expect(split.body.categoryName).toBe("Split");
+    expect(split.body.lines.map((l: { amountMinor: number }) => l.amountMinor)).toEqual([4000, 6000]);
+
+    const stale = await request(app()).patch(`/api/v1/transactions/${t.id}`).set(auth(s)).send({ version: 1, lines: [{ accountId: rent, amountMinor: 10000 }] });
+    expect(stale.status).toBe(409);
+    expect(stale.body.error.code).toBe("stale_version");
+
+    const short = await request(app()).patch(`/api/v1/transactions/${t.id}`).set(auth(s)).send({ version: 3, lines: [{ accountId: rent, amountMinor: 9999 }] });
+    expect(short.status).toBe(422);
+    expect(short.body.error.code).toBe("invalid_line");
+  });
+
+  it("edits a manual entry's amount/date by reversing and re-posting, but not an imported one", async () => {
+    const s = await signup(app());
+    const t = (await add(s, { amountMinor: 10000, memo: "Typo" })).body;
+    const fixed = await request(app()).patch(`/api/v1/transactions/${t.id}`).set(auth(s)).send({ version: 1, amountMinor: 1000, memo: "Fixed" });
+    expect(fixed.status).toBe(200);
+    expect(fixed.body.id).not.toBe(t.id);
+    expect(fixed.body).toMatchObject({ amountMinor: 1000, memo: "Fixed", direction: "out" });
+
+    const visible = await request(app()).get("/api/v1/transactions").set(auth(s));
+    expect(visible.body.data.map((x: { id: string }) => x.id)).toEqual([fixed.body.id]); // reversed + reversal hidden by default
+    const all = await request(app()).get("/api/v1/transactions?includeReversed=true").set(auth(s));
+    expect(all.body.data).toHaveLength(3);
+
+    // Simulate an imported row: source BANK is not editable in amount.
+    await db().journalEntry.update({ where: { id: fixed.body.id }, data: { source: "BANK" } });
+    const refused = await request(app()).patch(`/api/v1/transactions/${fixed.body.id}`).set(auth(s)).send({ version: 1, amountMinor: 5 });
+    expect(refused.status).toBe(409);
+    expect(refused.body.error.code).toBe("invalid_transition");
+  });
+
+  it("DELETE reverses (nothing is ever deleted) and a second delete is refused", async () => {
+    const s = await signup(app());
+    const t = (await add(s, {})).body;
+    const del = await request(app()).delete(`/api/v1/transactions/${t.id}`).set(auth(s));
     expect(del.status).toBe(200);
-    expect((await request(app).get(k.list).set(auth(token))).body).toHaveLength(1);
+    expect(del.body.original.status).toBe("REVERSED");
+    expect(del.body.reversal.reversesEntryId).toBe(t.id);
+    expect((await request(app()).delete(`/api/v1/transactions/${t.id}`).set(auth(s))).status).toBe(409);
+    expect((await request(app()).get("/api/v1/transactions").set(auth(s))).body.data).toHaveLength(0);
+    expect(await db().journalEntry.count()).toBe(2);
   });
 
-  it("validates input: missing label, non-positive amount, bad date", async () => {
-    const { token } = await signup(app);
-    const missing = await request(app).post(k.add).set(auth(token)).send(payload({ [k.label]: "" }));
-    expect(missing.status).toBe(400);
-    expect(missing.body.error.param).toBe(k.label);
-    const zero = await request(app).post(k.add).set(auth(token)).send(payload({ amount: 0 }));
-    expect(zero.status).toBe(400);
-    expect(zero.body.error.param).toBe("amount");
-    const badDate = await request(app).post(k.add).set(auth(token)).send(payload({ date: "not-a-date" }));
-    expect(badDate.status).toBe(400);
-    expect(badDate.body.error.param).toBe("date");
-  });
-
-  it("another user cannot read, update, or delete my rows (IDOR fixed)", async () => {
-    const owner = await signup(app, "owner@example.com");
-    const other = await signup(app, "other@example.com");
-    const mine = await request(app).post(k.add).set(auth(owner.token)).send(payload());
-
-    expect((await request(app).get(k.list).set(auth(other.token))).body).toHaveLength(0);
-    const upd = await request(app).patch(k.update(mine.body._id)).set(auth(other.token)).send({ amount: 1 });
-    expect(upd.status).toBe(404);
-    const del = await request(app).delete(k.del(mine.body._id)).set(auth(other.token));
-    expect(del.status).toBe(404);
-
-    const still = await request(app).get(k.list).set(auth(owner.token));
-    expect(still.body[0].amount).toBe(1250.5);
-  });
-
-  it("requires auth on every route", async () => {
-    const id = "000000000000000000000000";
-    const calls = [
-      request(app).post(k.add).send({}),
-      request(app).get(k.list),
-      request(app).patch(k.update(id)).send({}),
-      request(app).delete(k.del(id)),
-      request(app).get(k.excel),
-    ];
-    for (const res of await Promise.all(calls)) expect(res.status).toBe(401);
+  it("is invisible across organizations: foreign ids read as 404, foreign org header too", async () => {
+    const a = await signup(app());
+    const b = await signup(app());
+    const mine = (await add(a, {})).body;
+    expect((await request(app()).get(`/api/v1/transactions/${mine.id}`).set(auth(b))).status).toBe(404);
+    expect((await request(app()).patch(`/api/v1/transactions/${mine.id}`).set(auth(b)).send({ version: 1, memo: "x" })).status).toBe(404);
+    expect((await request(app()).delete(`/api/v1/transactions/${mine.id}`).set(auth(b))).status).toBe(404);
+    expect((await request(app()).get("/api/v1/transactions").set(auth(b))).body.data).toHaveLength(0);
+    // b claims a's organization by header
+    const spoof = await request(app()).get("/api/v1/transactions").set(auth(b.token, a.organization.id));
+    expect(spoof.status).toBe(404);
+    expect(spoof.body.error.code).toBe("organization_not_found");
+    // malformed ids behave like foreign ids
+    expect((await request(app()).get("/api/v1/transactions/not-a-uuid").set(auth(a))).status).toBe(404);
   });
 
   it("streams an .xlsx export with the formula-injection guard", async () => {
-    const { token } = await signup(app);
-    await request(app).post(k.add).set(auth(token)).send(payload({ [k.label]: '=HYPERLINK("http://evil")' }));
-    const res = await request(app).get(k.excel).set(auth(token)).buffer(true).parse(collect);
+    const s = await signup(app());
+    await add(s, { memo: '=HYPERLINK("http://evil")' });
+    const res = await request(app()).get("/api/v1/transactions/export.xlsx?direction=out").set(auth(s)).buffer(true).parse(collect);
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toContain("spreadsheetml");
-    expect(res.headers["content-disposition"]).toContain(".xlsx");
+    expect(res.headers["content-disposition"]).toContain("transactions-out.xlsx");
     expect((res.body as Buffer).subarray(0, 2).toString()).toBe("PK");
   });
-
-  if (k.delLegacy) {
-    const legacy = k.delLegacy;
-    it("keeps the legacy /income/delete/:id path working", async () => {
-      const { token } = await signup(app);
-      const row = await request(app).post(k.add).set(auth(token)).send(payload());
-      const del = await request(app).delete(legacy(row.body._id)).set(auth(token));
-      expect(del.status).toBe(200);
-    });
-  }
 });

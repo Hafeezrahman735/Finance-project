@@ -5,6 +5,7 @@ const EditIncomeform = ({income, onEdit}) => {
 
   const [formdata, setformdata] = useState({
     _id: income._id || "",
+    version: income.version,
     source: income.source || "",
     amount: income.amount || "",
     date: income.date || ""
@@ -16,6 +17,7 @@ const EditIncomeform = ({income, onEdit}) => {
     if (income) {
       setformdata({
         _id: income._id,
+        version: income.version,
         source: income.source,
         amount: income.amount,
         date: income.date?.split("T")[0]

@@ -1,8 +1,8 @@
 {
   "name": "@ledgeriq/api",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "LedgerIQ API (Express 5, TypeScript). Still on MongoDB until the Prisma/Postgres PR.",
+  "description": "LedgerIQ API (Express 5, TypeScript, Prisma 7 on Postgres).",
   "type": "module",
   "main": "dist/server.js",
   "scripts": {
@@ -32,7 +32,6 @@
     "exceljs": "^4.4.0",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.16.0",
     "pg": "^8.23.0",
     "pg-boss": "^12.31.0",
     "pino": "^9.6.0",
@@ -50,12 +49,12 @@
     "eslint": "^9.25.0",
     "fast-check": "^3.23.2",
     "globals": "^16.0.0",
-    "mongodb-memory-server": "^10.1.4",
     "pino-pretty": "^13.0.0",
     "supertest": "^7.1.0",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.31.0",
-    "vitest": "^3.1.1"
+    "vitest": "^3.1.1",
+    "mongoose": "^8.16.0"
   }
 }

@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import IncomeOverview from '../../components/Income/IncomeOverview';
-import axiosInstance from '../../utils/axiosinstance';
-import { API_PATHS } from '../../utils/apiPaths';
+import { createTransaction, deleteTransaction, downloadExport, listTransactions, updateTransaction } from '../../utils/api';
 import Modal from '../../components/Modal';
 import AddIncomeForm from '../../components/Income/AddIncomeForm';
 import { toast } from 'react-hot-toast';
@@ -30,13 +29,7 @@ const Income = () => {
     setloading(true);
 
     try {
-      const response = await axiosInstance.get(
-        `${API_PATHS.INCOME.GET_ALL_INCOME}`
-      );
-
-      if (response.data) {
-        setIncomeData(response.data);
-      }
+      setIncomeData(await listTransactions("in"));
     }catch (error) {
       console.log("Something went wrong. Please try again", error)
     } finally {
@@ -46,7 +39,7 @@ const Income = () => {
 
   // handle add income 
   const handleAddIncome = async (income) => {
-    const {source, amount,date,icon} = income;
+    const {source, amount, date} = income;
 
     if (!source.trim()){
       toast.error("Source is required");
@@ -64,12 +57,7 @@ const Income = () => {
     }
 
     try {
-      await axiosInstance.post(API_PATHS.INCOME.ADD_INCOME, {
-        source,
-        amount,
-        date,
-        icon
-      });
+      await createTransaction({ direction: "in", amount, date, memo: source });
       setOpenAddIncomeModal(false);
       toast.success("Income added succesfully");
       fetchIncomeDetails();
@@ -81,7 +69,7 @@ const Income = () => {
   //delete a income 
   const deleteIncome = async (id) => {
     try {
-      await axiosInstance.delete(API_PATHS.INCOME.DELETE_INCOME(id));
+      await deleteTransaction(id);
 
       setOpenDeleteAlert({ show: false, data: null});
       toast.success("Income deatils deleted successfully");
@@ -96,7 +84,7 @@ const Income = () => {
 
   const editIncome = async (income) => {
     try {
-      await axiosInstance.patch(API_PATHS.INCOME.EDIT_INCOME(income._id), income);
+      await updateTransaction(income._id, income.version, { amount: income.amount, date: income.date, memo: income.source });
       setEditIncomeModal(false);
       toast.success("Income details updated successfully");
       fetchIncomeDetails();
@@ -108,7 +96,13 @@ const Income = () => {
     }
   }
 
-  const handleDownloadIncomeDetails = async () => {};
+  const handleDownloadIncomeDetails = async () => {
+    try {
+      await downloadExport("in");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Download failed");
+    }
+  };
 
   useEffect(() => {
     fetchIncomeDetails()

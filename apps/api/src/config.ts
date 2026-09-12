@@ -13,7 +13,7 @@ import { z } from "zod";
  */
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  MONGO_URL: z.string().min(1),
+  DATABASE_URL: z.string().min(1),
   JWT_SECRET: z.string().min(16, "must be at least 16 characters"),
   JWT_EXPIRES_IN: z.string().default("1h"),
   PORT: z.coerce.number().int().positive().default(8000),
@@ -24,8 +24,8 @@ const schema = z.object({
 export type Config = z.infer<typeof schema>;
 
 const docsFor: Record<string, string> = {
-  MONGO_URL: "docs/setup.md#3-configure-the-api",
-  JWT_SECRET: "docs/setup.md#3-configure-the-api",
+  DATABASE_URL: "docs/setup.md#4-configure-the-api",
+  JWT_SECRET: "docs/setup.md#4-configure-the-api",
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
