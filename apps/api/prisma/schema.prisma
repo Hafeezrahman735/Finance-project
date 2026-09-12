@@ -30,17 +30,20 @@ datasource db {
 // ---------------------------------------------------------------------------
 
 model User {
-  id            String   @id @default(uuid()) @db.Uuid
-  email         String   @unique
-  fullName      String   @map("full_name")
-  passwordHash  String   @map("password_hash")
+  id              String    @id @default(uuid()) @db.Uuid
+  email           String    @unique
+  fullName        String    @map("full_name")
+  passwordHash    String    @map("password_hash")
   /// Mongo _id of the user this row was migrated from; null for native signups.
-  legacyMongoId String?  @unique @map("legacy_mongo_id")
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  legacyMongoId   String?   @unique @map("legacy_mongo_id")
+  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  memberships Membership[]
-  auditLogs   AuditLog[]
+  memberships   Membership[]
+  auditLogs     AuditLog[]
+  refreshTokens RefreshToken[]
+  authTokens    AuthToken[]
 
   @@map("users")
 }
@@ -444,4 +447,51 @@ model CategoryRule {
 
   @@index([organizationId, priority])
   @@map("category_rules")
+}
+
+// ---------------------------------------------------------------------------
+// Sessions and one-time tokens (Slice 1, lane 1.1)
+// ---------------------------------------------------------------------------
+
+/// Opaque refresh tokens, stored hashed. One row per issued token; rotation
+/// creates a new row in the same family and marks the old one used. A used
+/// token presented again outside the two-tab grace window is reuse: the
+/// whole family is revoked (eng review F10).
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  familyId  String    @map("family_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  userAgent String?   @map("user_agent")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, familyId])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
+
+enum AuthTokenPurpose {
+  PASSWORD_RESET
+  EMAIL_VERIFY
+}
+
+/// One-time tokens for email links, stored hashed, single use, short-lived.
+model AuthToken {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  purpose   AuthTokenPurpose
+  tokenHash String           @unique @map("token_hash")
+  expiresAt DateTime         @map("expires_at") @db.Timestamptz(3)
+  usedAt    DateTime?        @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@map("auth_tokens")
 }

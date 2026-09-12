@@ -9,6 +9,13 @@ export const API_PATHS = {
     LOGIN: "/api/v1/auth/login",
     REGISTER: "/api/v1/auth/register",
     ME: "/api/v1/auth/me",
+    REFRESH: "/api/v1/auth/refresh",
+    LOGOUT: "/api/v1/auth/logout",
+    LOGOUT_ALL: "/api/v1/auth/logout-all",
+    FORGOT_PASSWORD: "/api/v1/auth/forgot-password",
+    RESET_PASSWORD: "/api/v1/auth/reset-password",
+    VERIFY_EMAIL: "/api/v1/auth/verify-email",
+    RESEND_VERIFICATION: "/api/v1/auth/resend-verification",
   },
   ORGANIZATIONS: {
     LIST: "/api/v1/organizations",

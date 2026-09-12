@@ -4,6 +4,7 @@ import Button from "../../components/ui/Button";
 import Field from "../../components/ui/Field";
 import { UserContext } from "../../context/userContext";
 import { auth, errorMessage } from "../../lib/api";
+import { session } from "../../lib/session";
 import AuthLayout from "./AuthLayout";
 
 /** One screen, four fields, straight to the Overview (plan: Pass 2, Signup). */
@@ -34,7 +35,7 @@ export default function SignUp() {
         ...(form.organizationName.trim() ? { organizationName: form.organizationName.trim() } : {}),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
-      localStorage.setItem("token", data.token);
+      session.setToken(data.token);
       updateUser(data);
       navigate("/overview");
     } catch (err) {

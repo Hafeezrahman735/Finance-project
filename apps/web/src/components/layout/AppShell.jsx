@@ -2,7 +2,9 @@ import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
 import React, { useContext, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { UserContext } from "../../context/userContext";
+import { signOut } from "../../lib/session";
 import Sheet from "../ui/Sheet";
+import VerifyBanner from "./VerifyBanner";
 
 const NAV = [
   { key: "overview", label: "Overview", to: "/overview" },
@@ -30,8 +32,8 @@ export default function AppShell({ active, children }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const logout = () => {
-    localStorage.removeItem("token");
+  const logout = async () => {
+    await signOut();
     clearUser();
     navigate("/login");
   };
@@ -90,6 +92,7 @@ export default function AppShell({ active, children }) {
         </div>
       </nav>
       <main id="main" className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-8 sm:py-8">
+        <VerifyBanner />
         {children}
       </main>
       <Sheet open={help} onClose={() => setHelp(false)} title="Keyboard shortcuts">

@@ -3,25 +3,31 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import type { Config } from "../src/config.js";
 import type { Db } from "../src/db/prisma.js";
+import type { RouteDeps } from "../src/routes.js";
+import { CapturingEmailSink } from "../src/services/email/email.js";
 import { MembershipRole } from "../src/generated/prisma/enums.js";
 
 export const testConfig: Config = {
   NODE_ENV: "test",
   DATABASE_URL: "unused-in-tests (see test/pg.ts)",
   JWT_SECRET: "test-secret-at-least-16-chars",
-  JWT_EXPIRES_IN: "1h",
+  JWT_EXPIRES_IN: "15m",
+  REFRESH_TOKEN_DAYS: 30,
+  APP_URL: "http://localhost:5173",
+  RESEND_API_KEY: undefined,
+  EMAIL_FROM: "LedgerIQ <test@example.com>",
   PORT: 0,
   CLIENT_URL: undefined,
   LOG_LEVEL: "silent",
 };
 
-export function makeApp(db: Db, config: Partial<Config> = {}) {
-  return createApp(db, { ...testConfig, ...config }, pino({ level: "silent" }));
+export function makeApp(db: Db, config: Partial<Config> = {}, deps: Partial<RouteDeps> = {}) {
+  return createApp(db, { ...testConfig, ...config }, pino({ level: "silent" }), { email: new CapturingEmailSink(), ...deps });
 }
 
 export interface Session {
   token: string;
-  user: { id: string; email: string; fullName: string };
+  user: { id: string; email: string; fullName: string; emailVerifiedAt: string | null };
   organization: { id: string; name: string; currency: string; timezone: string; role: MembershipRole };
 }
 

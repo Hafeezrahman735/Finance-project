@@ -1,3 +1,4 @@
+import cookieParser from "cookie-parser";
 import cors from "cors";
 import express, { type Express } from "express";
 import type { Logger } from "pino";
@@ -5,12 +6,14 @@ import type { Config } from "./config.js";
 import type { Db } from "./db/prisma.js";
 import { errorHandler, notFoundHandler } from "./lib/errors.js";
 import { requestLogger } from "./lib/logger.js";
-import { buildRouter } from "./routes.js";
+import { buildRouter, type RouteDeps } from "./routes.js";
+import { createEmailSink } from "./services/email/email.js";
 
 /**
  * Request flow:
  *
  *   request ─▶ requestLogger (id, child log) ─▶ cors ─▶ express.json
+ *           ─▶ cookieParser (refresh cookie on /api/v1/auth/*)
  *           ─▶ /healthz | /api/v1/* (routes.ts: validate ─▶ protect ─▶ controller)
  *           ─▶ notFoundHandler (unmatched)
  *           ─▶ errorHandler (AppError | ZodError | parse error | unknown → envelope)
@@ -18,7 +21,7 @@ import { buildRouter } from "./routes.js";
  * Built as a factory so tests can spin up an app against the test Postgres
  * with their own config, without touching process.env or listening on a port.
  */
-export function createApp(db: Db, config: Config, logger: Logger): Express {
+export function createApp(db: Db, config: Config, logger: Logger, deps: Partial<RouteDeps> = {}): Express {
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", 1);
@@ -35,12 +38,13 @@ export function createApp(db: Db, config: Config, logger: Logger): Express {
     }),
   );
   app.use(express.json({ limit: "1mb" }));
+  app.use(cookieParser());
 
   app.get("/healthz", async (_req, res) => {
     await db.$queryRaw`SELECT 1`;
     res.json({ ok: true });
   });
-  app.use("/api/v1", buildRouter(db, config));
+  app.use("/api/v1", buildRouter(db, config, { email: deps.email ?? createEmailSink(config, logger), logger }));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

@@ -8,6 +8,7 @@ export interface AuthedUser {
   id: string;
   email: string;
   fullName: string;
+  emailVerifiedAt: Date | null;
   createdAt: Date;
 }
 
@@ -33,7 +34,7 @@ export function protect(auth: AuthService) {
     const token = header?.startsWith("Bearer ") ? header.slice("Bearer ".length) : undefined;
     if (!token) throw new AuthenticationError("Not authorized, no token", "missing_token");
     const user = await auth.authenticate(token);
-    req.user = { id: user.id, email: user.email, fullName: user.fullName, createdAt: user.createdAt };
+    req.user = { id: user.id, email: user.email, fullName: user.fullName, emailVerifiedAt: user.emailVerifiedAt, createdAt: user.createdAt };
     next();
   };
 }

@@ -4,7 +4,7 @@ import { API_PATHS } from "../utils/apiPaths";
 /**
  * Thin client over /api/v1 (docs/api.md). Amounts are integer minor units;
  * lists are { data, nextCursor }. Errors carry `error.code` (utils/axiosinstance
- * handles 401 → /login globally).
+ * refreshes a stale access token once, then falls back to /login).
  */
 
 export function errorMessage(err, fallback = "Something went wrong") {
@@ -19,6 +19,11 @@ export const auth = {
   login: (body) => axiosInstance.post(API_PATHS.AUTH.LOGIN, body).then((r) => r.data),
   register: (body) => axiosInstance.post(API_PATHS.AUTH.REGISTER, body).then((r) => r.data),
   me: () => axiosInstance.get(API_PATHS.AUTH.ME).then((r) => r.data),
+  logoutAll: () => axiosInstance.post(API_PATHS.AUTH.LOGOUT_ALL).then((r) => r.data),
+  forgotPassword: (email) => axiosInstance.post(API_PATHS.AUTH.FORGOT_PASSWORD, { email }).then((r) => r.data),
+  resetPassword: (token, password) => axiosInstance.post(API_PATHS.AUTH.RESET_PASSWORD, { token, password }).then((r) => r.data),
+  verifyEmail: (token) => axiosInstance.post(API_PATHS.AUTH.VERIFY_EMAIL, { token }).then((r) => r.data),
+  resendVerification: () => axiosInstance.post(API_PATHS.AUTH.RESEND_VERIFICATION).then((r) => r.data),
 };
 
 export const accounts = {

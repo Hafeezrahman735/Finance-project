@@ -2,6 +2,7 @@ import { useContext, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { UserContext } from "../context/userContext";
 import { auth } from "../lib/api";
+import { session } from "../lib/session";
 
 /** Loads /auth/me once per session; sends the visitor to /login when the token is missing or stale. */
 export function useUserAuth() {
@@ -10,7 +11,7 @@ export function useUserAuth() {
 
   useEffect(() => {
     if (user) return;
-    if (!localStorage.getItem("token")) {
+    if (!session.getToken()) {
       navigate("/login");
       return;
     }

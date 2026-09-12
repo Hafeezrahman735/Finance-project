@@ -1,9 +1,10 @@
 import React, { useContext, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import Button from "../../components/ui/Button";
 import Field from "../../components/ui/Field";
 import { UserContext } from "../../context/userContext";
 import { auth, errorMessage } from "../../lib/api";
+import { session } from "../../lib/session";
 import AuthLayout from "./AuthLayout";
 
 export default function Login() {
@@ -13,6 +14,7 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
   const { updateUser } = useContext(UserContext);
   const navigate = useNavigate();
+  const notice = useLocation().state?.notice;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -24,7 +26,7 @@ export default function Login() {
     setBusy(true);
     try {
       const data = await auth.login({ email: email.trim(), password });
-      localStorage.setItem("token", data.token);
+      session.setToken(data.token);
       updateUser(data);
       navigate("/overview");
     } catch (err) {
@@ -44,12 +46,20 @@ export default function Login() {
       }
     >
       <form onSubmit={submit} noValidate className="flex flex-col gap-4">
+        {notice && (
+          <p role="status" className="text-base">
+            {notice}
+          </p>
+        )}
         <Field label="Email">
           <input type="email" autoComplete="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
         <Field label="Password">
           <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
         </Field>
+        <p className="text-sm">
+          <Link to="/forgot-password">Forgot your password?</Link>
+        </p>
         {error && (
           <p role="alert" className="text-negative">
             {error}

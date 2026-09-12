@@ -1,11 +1,11 @@
 # API reference (`/api/v1`)
 
-Source of truth: the route table in `apps/api/src/routes.ts`. Every route there is exercised by the generated authz matrix (`apps/api/test/authz.test.ts`); a route not in the table does not exist. This page is the human-readable mirror; `zod-openapi` generation is a TODO.
+Source of truth: the route table in `apps/api/src/routes.ts`. Every route there is exercised by the generated authz matrix (`apps/api/test/authz.test.ts`); a route not in the table does not exist. Session and recovery flows are covered by `apps/api/test/sessions.test.ts`. This page is the human-readable mirror; `zod-openapi` generation is a TODO.
 
 ## Conventions
 
 - JSON, `camelCase`. Money is an integer number of minor units (`amountMinor: 1250` = $12.50). Dates are calendar dates `YYYY-MM-DD` in the organization's timezone.
-- Auth: `Authorization: Bearer <token>` (JWT from register/login). Active organization: `X-Organization-Id: <uuid>`; omitted = your primary organization. A foreign or unknown organization id is a `404`, never `403`.
+- Auth: `Authorization: Bearer <token>`, a 15-minute access JWT from register / login / refresh. Register and login also set an httpOnly `ledgeriq_refresh` cookie (path `/api/v1/auth`, `SameSite=Strict`, 30 days) that `POST /auth/refresh` rotates; the raw refresh token is never in a JSON body. Reusing a refresh token outside a 10-second grace window (a two-tab race) revokes that whole session family (`401 refresh_reused`). Active organization: `X-Organization-Id: <uuid>`; omitted = your primary organization. A foreign or unknown organization id is a `404`, never `403`.
 - Lists: `{ "data": [...], "nextCursor": "..." | null }` with `?cursor=&limit=` (keyset on date desc, id desc).
 - Errors: `{ "message", "error": { "type", "code", "message", "param"?, "requestId" } }`. Switch on `code`. The same `requestId` is on the `X-Request-Id` response header and in the API log line.
 - Roles: `VIEWER` < `ACCOUNTANT` < `BOOKKEEPER` < `ADMIN` < `OWNER`. Reads need `VIEWER`; writes need `BOOKKEEPER`. Below the minimum: `403 insufficient_role`.
@@ -16,7 +16,14 @@ Source of truth: the route table in `apps/api/src/routes.ts`. Every route there 
 |---|---|---|---|---|
 | POST | `/auth/register` | public | `fullName, email, password, organizationName?, timezone?` | `201 { id, user, organization, token }` |
 | POST | `/auth/login` | public | `email, password` | `{ id, user, organization, token }` |
-| GET | `/auth/me` | auth | — | `{ user, organization }` |
+| POST | `/auth/refresh` | cookie | — | `{ token, user }` and a rotated cookie; `401 refresh_*` clears the cookie |
+| POST | `/auth/logout` | cookie | — | `{ message }`; revokes the current session family, clears the cookie |
+| POST | `/auth/logout-all` | auth | — | `{ message, sessions }`; revokes every session for the user |
+| POST | `/auth/forgot-password` | public | `email` | `200` always (no enumeration); emails a one-hour link `APP_URL/reset-password?token=…` |
+| POST | `/auth/reset-password` | public | `token, password` | `{ message }`; single-use, signs out everywhere |
+| POST | `/auth/verify-email` | public | `token` | `{ user }` with `emailVerifiedAt` set; 24-hour single-use link `APP_URL/verify-email?token=…` sent on register |
+| POST | `/auth/resend-verification` | auth | — | `{ message }`; no-op once verified |
+| GET | `/auth/me` | auth | — | `{ user: { id, fullName, email, emailVerifiedAt, createdAt }, organization }` |
 | GET | `/organizations` | auth | — | `{ data: [ { id, name, currency, timezone, role } ] }` |
 | GET | `/organizations/current` | VIEWER | — | `{ id, name, currency, timezone, role }` |
 | GET | `/accounts` | VIEWER | — | `{ data: [ { id, name, code, type, systemKey } ] }` |
@@ -72,7 +79,8 @@ Source of truth: the route table in `apps/api/src/routes.ts`. Every route there 
 |---|---|---|
 | `invalid_param` | 400 | zod validation failed; `param` names the field |
 | `invalid_json` | 400 | body is not JSON |
-| `missing_token`, `invalid_token`, `unknown_user`, `invalid_credentials`, `no_organization` | 401 | authentication |
+| `missing_token`, `invalid_token`, `token_expired`, `unknown_user`, `invalid_credentials`, `no_organization` | 401 | authentication; the web client refreshes once on `token_expired` / `invalid_token` |
+| `refresh_missing`, `refresh_invalid`, `refresh_expired`, `refresh_revoked`, `refresh_reused` | 401 | `/auth/refresh`; every one clears the cookie, `refresh_reused` also revoked the family |
 | `insufficient_role` | 403 | role below the route's minimum |
 | `not_found`, `entry_not_found`, `organization_not_found`, `route_not_found` | 404 | includes foreign ids and malformed ids |
 | `email_taken`, `bank_account_exists` | 409 | register / bank accounts |

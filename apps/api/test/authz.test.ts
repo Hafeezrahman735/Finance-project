@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { MembershipRole } from "../src/generated/prisma/enums.js";
 import { routeTable } from "../src/routes.js";
 import { roleAtLeast } from "../src/middleware/auth.js";
+import { CapturingEmailSink } from "../src/services/email/email.js";
 import { auth, invite, makeApp, signup, testConfig, type Session } from "./helpers.js";
 import { describePg, usePg } from "./pg.js";
 
@@ -25,7 +26,7 @@ run("authz matrix", () => {
 
   it("covers every route for every role", async () => {
     const app = makeApp(db());
-    const routes = routeTable(db(), testConfig);
+    const routes = routeTable(db(), testConfig, { email: new CapturingEmailSink() });
     expect(routes.length).toBeGreaterThan(10);
 
     const owner = await signup(app);
@@ -44,7 +45,8 @@ run("authz matrix", () => {
 
       // Unauthenticated
       const anon = await send();
-      if (route.access === "public") check(`${route.method} ${route.path}: public route returned ${anon.status}`, anon.status !== 401 && anon.status !== 403);
+      // Public routes must never demand a bearer token or a role. (/auth/refresh still 401s without its cookie; that is not a bearer check.)
+      if (route.access === "public") check(`${route.method} ${route.path}: public route returned ${anon.status} ${anon.body?.error?.code ?? ""}`, anon.status !== 403 && anon.body?.error?.code !== "missing_token");
       else check(`${route.method} ${route.path}: no token gave ${anon.status}, expected 401`, anon.status === 401);
       if (route.access === "public" || route.access === "auth") continue;
 

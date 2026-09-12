@@ -8,7 +8,9 @@ import { ValidationError as ValidationErrorForRoute } from "./lib/errors.js";
 import { sendWorkbook } from "./lib/excel.js";
 import { protect, requireOrg } from "./middleware/auth.js";
 import { body, validateBody } from "./middleware/validate.js";
-import { authService, loginSchema, registerSchema, toUserDTO } from "./services/auth/auth.js";
+import type { Logger } from "pino";
+import { authService, forgotPasswordSchema, loginSchema, registerSchema, resetPasswordSchema, toUserDTO, verifyEmailSchema, type AuthResult } from "./services/auth/auth.js";
+import type { EmailSink } from "./services/email/email.js";
 import { bankAccountsService, createBankAccountSchema } from "./services/banking/bankAccounts.js";
 import { importsService, MAX_FILE_BYTES } from "./services/banking/imports.js";
 import { createRuleSchema, rulesService } from "./services/rules/rules.js";
@@ -40,8 +42,20 @@ export interface RouteDef {
 
 const actor = (req: Request) => ({ userId: req.user?.id ?? null, requestId: req.id });
 
-export function routeTable(db: Db, config: Config): RouteDef[] {
-  const auth = authService(db, config);
+export interface RouteDeps {
+  email: EmailSink;
+  logger?: Logger;
+}
+
+export const REFRESH_COOKIE = "ledgeriq_refresh";
+
+export function routeTable(db: Db, config: Config, deps: RouteDeps): RouteDef[] {
+  const auth = authService(db, config, deps.email, deps.logger);
+  const cookieOpts = (maxAgeMs: number) => ({ httpOnly: true, sameSite: "strict" as const, secure: config.NODE_ENV === "production", path: "/api/v1/auth", maxAge: maxAgeMs });
+  const setRefresh = (res: Response, raw: string) => res.cookie(REFRESH_COOKIE, raw, cookieOpts(config.REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000));
+  const clearRefresh = (res: Response) => res.clearCookie(REFRESH_COOKIE, { path: "/api/v1/auth" });
+  const readRefresh = (req: Request) => (req.cookies as Record<string, string> | undefined)?.[REFRESH_COOKIE];
+  const withoutRefresh = ({ refreshToken: _r, ...rest }: AuthResult) => rest;
   const txns = transactionsService(db);
   const dashboard = dashboardService(db);
   const banks = bankAccountsService(db);
@@ -54,8 +68,89 @@ export function routeTable(db: Db, config: Config): RouteDef[] {
 
   return [
     // --- auth -------------------------------------------------------------
-    { method: "post", path: "/auth/register", access: "public", handler: chain(validateBody(registerSchema), async (req, res) => res.status(201).json(await auth.register(body<typeof registerSchema>(req)))) },
-    { method: "post", path: "/auth/login", access: "public", handler: chain(validateBody(loginSchema), async (req, res) => res.json(await auth.login(body<typeof loginSchema>(req)))) },
+    {
+      method: "post",
+      path: "/auth/register",
+      access: "public",
+      handler: chain(validateBody(registerSchema), async (req, res) => {
+        const r = await auth.register(body<typeof registerSchema>(req), req.get("user-agent"));
+        setRefresh(res, r.refreshToken);
+        res.status(201).json(withoutRefresh(r));
+      }),
+    },
+    {
+      method: "post",
+      path: "/auth/login",
+      access: "public",
+      handler: chain(validateBody(loginSchema), async (req, res) => {
+        const r = await auth.login(body<typeof loginSchema>(req), req.get("user-agent"));
+        setRefresh(res, r.refreshToken);
+        res.json(withoutRefresh(r));
+      }),
+    },
+    {
+      method: "post",
+      path: "/auth/refresh",
+      access: "public",
+      handler: async (req, res) => {
+        try {
+          const r = await auth.refresh(readRefresh(req), req.get("user-agent"));
+          setRefresh(res, r.refreshToken);
+          res.json({ token: r.token, user: r.user });
+        } catch (err) {
+          clearRefresh(res);
+          throw err;
+        }
+      },
+    },
+    {
+      method: "post",
+      path: "/auth/logout",
+      access: "public",
+      handler: async (req, res) => {
+        await auth.sessions.revoke(readRefresh(req));
+        clearRefresh(res);
+        res.json({ message: "Signed out" });
+      },
+    },
+    {
+      method: "post",
+      path: "/auth/logout-all",
+      access: "auth",
+      handler: async (req, res) => {
+        const count = await auth.sessions.revokeAll(req.user!.id);
+        clearRefresh(res);
+        res.json({ message: "Signed out everywhere", sessions: count });
+      },
+    },
+    {
+      method: "post",
+      path: "/auth/forgot-password",
+      access: "public",
+      handler: chain(validateBody(forgotPasswordSchema), async (req, res) => {
+        await auth.forgotPassword(body<typeof forgotPasswordSchema>(req));
+        res.json({ message: "If that email has an account, a reset link is on its way" });
+      }),
+    },
+    {
+      method: "post",
+      path: "/auth/reset-password",
+      access: "public",
+      handler: chain(validateBody(resetPasswordSchema), async (req, res) => {
+        await auth.resetPassword(body<typeof resetPasswordSchema>(req));
+        res.json({ message: "Password updated; log in with the new one" });
+      }),
+    },
+    { method: "post", path: "/auth/verify-email", access: "public", handler: chain(validateBody(verifyEmailSchema), async (req, res) => res.json({ user: await auth.verifyEmail(body<typeof verifyEmailSchema>(req)) })) },
+    {
+      method: "post",
+      path: "/auth/resend-verification",
+      access: "auth",
+      handler: async (req, res) => {
+        await auth.resendVerification(req.user!.id);
+        res.json({ message: "Verification email sent" });
+      },
+    },
     { method: "get", path: "/auth/me", access: "auth", handler: async (req, res) => res.json({ user: toUserDTO(req.user!), organization: await auth.primaryOrganization(req.user!.id) }) },
 
     // --- organizations ----------------------------------------------------
@@ -138,10 +233,10 @@ export function routeTable(db: Db, config: Config): RouteDef[] {
   ];
 }
 
-export function buildRouter(db: Db, config: Config): Router {
-  const auth = authService(db, config);
+export function buildRouter(db: Db, config: Config, deps: RouteDeps): Router {
+  const auth = authService(db, config, deps.email, deps.logger);
   const router = Router();
-  for (const route of routeTable(db, config)) {
+  for (const route of routeTable(db, config, deps)) {
     const guards: RequestHandler[] = [];
     if (route.access !== "public") guards.push(protect(auth));
     if (route.access !== "public" && route.access !== "auth") guards.push(requireOrg(db, auth, route.access));

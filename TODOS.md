@@ -30,7 +30,7 @@ Plan: `~/.claude/plans/make-a-plan-to-witty-torvalds.md`. CEO plan: `~/.gstack/p
 ### Accountant read-only invite and multi-org switcher (Phase 2)
 - **What:** Invite by email with role, accountant view (read-only + export + comments), and the org switcher UI.
 - **Why:** Accountant access is a headline value prop; `Membership` and org middleware already land in Slice 1 so this is UI + email.
-- **Effort:** M. **Depends on:** email verification (Slice 1 follow-up).
+- **Effort:** M. **Depends on:** email verification (done, lane 1.1).
 
 ### Sales-tax rate on invoice and order lines + nexus exposure tracker (Phase 2, first item)
 - **What:** Per-line tax rate, tax-payable tracking, tax-collected report, sales-by-destination-state against economic-nexus thresholds with 80% warnings.
@@ -69,7 +69,9 @@ Plan: `~/.claude/plans/make-a-plan-to-witty-torvalds.md`. CEO plan: `~/.gstack/p
 
 ### Slice 1 follow-ups
 - Plaid webhook receiver with local tunnel (`/sandbox/item/fire_webhook`); Slice 1 uses "Sync now" polling.
-- Email verification, password reset, emailed brief (dropped from the minimum cut).
+- Emailed brief (dropped from the minimum cut). Email verification and password reset landed in lane 1.1.
+- Rate limiting on `/auth/*` (plan 1.1): per-IP and per-email counters for login, forgot-password, and resend-verification.
+- Gate outbound sends (invoices, Slice 2) on `emailVerifiedAt`; the flag is exposed on `/auth/me` today.
 
 ## Developer experience
 

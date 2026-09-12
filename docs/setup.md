@@ -51,7 +51,11 @@ cp apps/api/.env.example apps/api/.env
 | `PORT` | no | `8000` | The Vite dev server proxies `/api` to `http://localhost:8000` (`apps/web/vite.config.js`), so the app is same-origin in development. Change both if you change one. |
 | `CLIENT_URL` | no | none | CORS allowlist for a separately hosted web app only. With the proxy, leave unset. |
 | `LOG_LEVEL` | no | `info` | pino level. |
-| `JWT_EXPIRES_IN` | no | `1h` | Access token lifetime. |
+| `JWT_EXPIRES_IN` | no | `15m` | Access token lifetime; the web app refreshes it silently through the cookie. |
+| `REFRESH_TOKEN_DAYS` | no | `30` | How long a signed-in browser stays signed in without logging in again. |
+| `APP_URL` | no | `http://localhost:5173` | Where emailed links point (`/reset-password`, `/verify-email`). Set to the web app's public URL in production. |
+| `RESEND_API_KEY` | no | none | Sends verification and reset emails through [Resend](https://resend.com) (free tier: 3,000 emails/month, no card). **Without it, every email is printed to the API log with the link in it**, which is how local development works with zero vendor keys. |
+| `EMAIL_FROM` | no | `LedgerIQ <onboarding@resend.dev>` | Sender. Resend's `onboarding@resend.dev` only delivers to your own account email; verify a domain for real users. |
 
 The API validates its configuration at boot and prints one line per problem, e.g. `Config error: MONGO_URL is missing. Copy .env.example to .env and set it (docs/setup.md#3-configure-the-api).`
 
@@ -92,6 +96,8 @@ Run one side only with `npm run dev:api` or `npm run dev:web`.
 - **Dashboard blank, console shows `504` or `ECONNREFUSED` for `/api/...`** — the API is not running on 8000; check the `api` process output and `PORT` in `apps/api/.env`.
 - **Error responses** carry `{ message, error: { type, code, param?, requestId } }` and an `X-Request-Id` header; the same id appears in the API log line for that request.
 - **`401` immediately after login** — `JWT_SECRET` changed between issuing and verifying; log out and in again.
+- **Signed out after a short while** — the refresh cookie is scoped to `/api/v1/auth` on the same origin. If the web app is hosted separately, set `CLIENT_URL` for CORS and serve both over HTTPS on the same site, or the browser drops the `SameSite=Strict` cookie.
+- **Where did the verification / reset email go?** — with no `RESEND_API_KEY`, look in the API terminal for a `warn` line containing the link and open it in the browser.
 - **`Config error: DATABASE_URL is missing`** — section 4; `npm run setup` needs it too.
 - **`password authentication failed for user "ledgeriq"`** — the role was not created; run `scripts/create-local-db.sql` as a superuser (section 2A).
 - **Windows: `'tsx' is not recognized`** — run scripts through npm (`npm run dev:api`), not by calling binaries directly; the root install puts them under the root `node_modules/.bin`.

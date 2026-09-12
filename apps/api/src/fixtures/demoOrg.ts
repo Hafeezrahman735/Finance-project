@@ -55,7 +55,18 @@ export async function seedDemoOrg(db: Db, opts: { today?: CalendarDate; seed?: n
   const existing = await db.organization.findFirst({ where: { name: DEMO_ORG_NAME, memberships: { some: { userId: user.id } } } });
   if (existing) {
     // Re-seeding: wipe the org's books and rebuild (idempotent for `npm run db:seed`).
-    await db.organization.delete({ where: { id: existing.id } });
+    // The ledger triggers forbid deleting posted entries (docs/ledger.md); this is the
+    // one place that is allowed to, because the demo org is fixture data. The triggers
+    // are switched off around the cascade (not inside it: the deferred balance
+    // triggers leave pending events that block ALTER TABLE) and always restored.
+    await db.$executeRawUnsafe('ALTER TABLE "journal_entries" DISABLE TRIGGER "journal_entries_guard_delete"');
+    await db.$executeRawUnsafe('ALTER TABLE "journal_lines" DISABLE TRIGGER "journal_lines_guard_change"');
+    try {
+      await db.organization.delete({ where: { id: existing.id } });
+    } finally {
+      await db.$executeRawUnsafe('ALTER TABLE "journal_lines" ENABLE TRIGGER "journal_lines_guard_change"');
+      await db.$executeRawUnsafe('ALTER TABLE "journal_entries" ENABLE TRIGGER "journal_entries_guard_delete"');
+    }
   }
 
   const org = await db.organization.create({
