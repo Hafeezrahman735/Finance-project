@@ -27,6 +27,7 @@ export const API_PATHS = {
   DASHBOARD: {
     GET_DATA: "/api/v1/dashboard",
   },
+  METRICS: { GET: "/api/v1/metrics" },
   BANK_ACCOUNTS: { LIST: "/api/v1/bank-accounts" },
   IMPORTS: {
     LIST: "/api/v1/imports",

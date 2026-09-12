@@ -2,9 +2,10 @@ import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AppShell from "../components/layout/AppShell";
 import InOutChart from "../components/overview/InOutChart";
+import Numbers from "../components/overview/Numbers";
 import Button from "../components/ui/Button";
 import { useUserAuth } from "../hooks/useUserAuth";
-import { dashboard as dashboardApi, errorMessage } from "../lib/api";
+import { dashboard as dashboardApi, errorMessage, metrics as metricsApi } from "../lib/api";
 import { headlineCopy, money, shortDate } from "../lib/format";
 
 /**
@@ -16,6 +17,7 @@ export default function Overview() {
   useUserAuth();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
+  const [numbers, setNumbers] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -23,7 +25,9 @@ export default function Overview() {
     setLoading(true);
     setError(null);
     try {
-      setData(await dashboardApi.get());
+      const [d, m] = await Promise.all([dashboardApi.get(), metricsApi.get().catch(() => null)]);
+      setData(d);
+      setNumbers(m);
     } catch (err) {
       setError(errorMessage(err, "Could not load the overview"));
     } finally {
@@ -39,6 +43,8 @@ export default function Overview() {
   const headline = data
     ? headlineCopy({ incomeMinor: data.last30Days.incomeMinor, expenseMinor: data.last30Days.expenseMinor, uncategorizedCount: data.uncategorizedCount, hasAnyData, currency: data.currency })
     : null;
+
+  const runway = numbers?.metrics.find((m) => m.id === "runway_days");
 
   const primary = !data
     ? null
@@ -71,6 +77,7 @@ export default function Overview() {
               </h1>
               <p className="tnum mt-3 text-lg text-muted">
                 Cash on hand <span className="font-medium text-text">{money(data.cashOnHandMinor, data.currency)}</span>
+                {runway?.value !== null && runway?.value !== undefined && <> · about {runway.display} of runway</>}
                 {data.uncategorizedCount > 0 && (
                   <>
                     {" "}
@@ -104,6 +111,8 @@ export default function Overview() {
             </div>
             <InOutChart daily={data.last30Days.daily} currency={data.currency} />
           </section>
+
+          <Numbers view={numbers} />
 
           <section aria-labelledby="recent" className="mt-10">
             <div className="mb-2 flex items-baseline justify-between">

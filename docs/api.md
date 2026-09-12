@@ -28,6 +28,7 @@ Source of truth: the route table in `apps/api/src/routes.ts`. Every route there 
 | GET | `/organizations/current` | VIEWER | — | `{ id, name, currency, timezone, role }` |
 | GET | `/accounts` | VIEWER | — | `{ data: [ { id, name, code, type, systemKey } ] }` |
 | GET | `/dashboard` | VIEWER | — | totals, cash on hand, uncategorized count, 30/60-day windows, recent transactions (all in minor units) |
+| GET | `/metrics` | VIEWER | — | `MetricsView`: `metrics[]` (each `{ id, label, value, unit, display, window, prev?, channelId?, note? }`), `channels[]`, `recurring[]`, `processors[]`, `dataDays`, `insufficientData`. Last 30 days vs the prior 30 in the org timezone; cached per (org, day) and recomputed when the ledger changes. Ids are stable (`cash_on_hand`, `runway_days`, `gross_margin_pct_30d`, `roas_30d`, `channel:<id>:fee_rate`, `recurring:<slug>:amount`, `clearing:<processor>:days_since_payout`); `display` is the string the brief is allowed to quote |
 | GET | `/transactions` | VIEWER | `cursor, limit≤200, direction=in\|out, status=uncategorized\|all, from, to, includeReversed` | `{ data: Transaction[], nextCursor }` |
 | GET | `/transactions/export.xlsx` | VIEWER | same filters | `.xlsx` stream |
 | POST | `/transactions` | BOOKKEEPER | `direction, amountMinor, date, memo?, accountId?, bankAccountId?, channelId?` | `201 Transaction` |

@@ -15,6 +15,7 @@ import { bankAccountsService, createBankAccountSchema } from "./services/banking
 import { importsService, MAX_FILE_BYTES } from "./services/banking/imports.js";
 import { createRuleSchema, rulesService } from "./services/rules/rules.js";
 import { dashboardService } from "./services/dashboard/dashboard.js";
+import { metricsService } from "./services/metrics/metrics.js";
 import { createSchema, listQuerySchema, transactionsService, updateSchema } from "./services/transactions/transactions.js";
 
 /**
@@ -58,6 +59,7 @@ export function routeTable(db: Db, config: Config, deps: RouteDeps): RouteDef[] 
   const withoutRefresh = ({ refreshToken: _r, ...rest }: AuthResult) => rest;
   const txns = transactionsService(db);
   const dashboard = dashboardService(db);
+  const metrics = metricsService(db);
   const banks = bankAccountsService(db);
   const imports = importsService(db);
   const rules = rulesService(db);
@@ -170,6 +172,8 @@ export function routeTable(db: Db, config: Config, deps: RouteDeps): RouteDef[] 
 
     // --- dashboard --------------------------------------------------------
     { method: "get", path: "/dashboard", access: MembershipRole.VIEWER, handler: async (req, res) => res.json(await dashboard.get(req.org!.id, req.org!.currency, req.org!.timezone)) },
+    // --- metrics (plan E1): deterministic numbers with ids + display strings; cached per day ---
+    { method: "get", path: "/metrics", access: MembershipRole.VIEWER, handler: async (req, res) => res.json(await metrics.get(req.org!.id, req.org!.currency, req.org!.timezone)) },
 
     // --- transactions -----------------------------------------------------
     { method: "get", path: "/transactions", access: MembershipRole.VIEWER, handler: async (req, res) => res.json(await txns.list(req.org!.id, listQuerySchema.parse(req.query))) },

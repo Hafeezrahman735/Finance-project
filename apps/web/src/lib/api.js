@@ -34,6 +34,11 @@ export const dashboard = {
   get: () => axiosInstance.get(API_PATHS.DASHBOARD.GET_DATA).then((r) => r.data),
 };
 
+/** Deterministic metrics with ids and display strings (plan E1); cached server-side per day. */
+export const metrics = {
+  get: () => axiosInstance.get(API_PATHS.METRICS.GET).then((r) => r.data),
+};
+
 export const bankAccounts = {
   list: () => axiosInstance.get(API_PATHS.BANK_ACCOUNTS.LIST).then((r) => r.data.data),
   create: (body) => axiosInstance.post(API_PATHS.BANK_ACCOUNTS.LIST, body).then((r) => r.data),

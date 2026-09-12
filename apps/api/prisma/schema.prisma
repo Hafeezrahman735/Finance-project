@@ -68,6 +68,7 @@ model Organization {
   bankAccounts  BankAccount[]
   imports       Import[]
   rules         CategoryRule[]
+  metricsSnapshots MetricsSnapshot[]
 
   @@map("organizations")
 }
@@ -283,6 +284,28 @@ model Payout {
   @@unique([organizationId, processor, externalId])
   @@index([organizationId, status, arrivalDate])
   @@map("payouts")
+}
+
+// ---------------------------------------------------------------------------
+// Metrics (plan E1 / CEO finding 7.1)
+// ---------------------------------------------------------------------------
+
+/// One computed metrics payload per organization per calendar day. `fingerprint`
+/// is a cheap digest of the ledger (entry count + latest update) so a stale
+/// snapshot is recomputed on read instead of invalidated by every write.
+model MetricsSnapshot {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  asOf           DateTime @map("as_of") @db.Date
+  fingerprint    String
+  /// MetricsView (services/metrics/metrics.ts): every metric with id, value, unit, display, window.
+  payload        Json
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, asOf])
+  @@map("metrics_snapshots")
 }
 
 // ---------------------------------------------------------------------------

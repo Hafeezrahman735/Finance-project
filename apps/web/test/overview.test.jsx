@@ -6,11 +6,12 @@ import UserProvider from "../src/context/UserProvider";
 
 vi.mock("../src/lib/api", () => ({
   dashboard: { get: vi.fn() },
+  metrics: { get: vi.fn().mockRejectedValue(new Error("no metrics")) },
   auth: { me: vi.fn().mockResolvedValue({ user: { id: "u1", fullName: "Demo Owner", email: "demo@ledgeriq.local" }, organization: { id: "o1", name: "Sunny Side Studio", role: "OWNER" } }) },
   errorMessage: (e, f) => e?.message || f,
 }));
 
-import { dashboard } from "../src/lib/api";
+import { dashboard, metrics } from "../src/lib/api";
 import Overview from "../src/pages/Overview";
 
 const base = {
@@ -81,6 +82,48 @@ describe("Overview", () => {
     expect(screen.getByRole("button", { name: "Review transactions" })).toBeInTheDocument();
     expect(screen.getByText("SHOPIFY PAYOUT")).toBeInTheDocument();
     expect(screen.getByText("+$286.00")).toHaveClass("text-positive");
+  });
+
+  it("shows runway on the secondary line and the Numbers section with per-channel rows and recurring charges", async () => {
+    dashboard.get.mockResolvedValue({ ...base, totalIncomeMinor: 100000, totalExpenseMinor: 60000, cashOnHandMinor: 85000, last30Days: { ...base.last30Days, incomeMinor: 100000, expenseMinor: 60000 } });
+    const m = (id, label, value, unit, display, extra = {}) => ({ id, label, value, unit, display, window: null, ...extra });
+    metrics.get.mockResolvedValueOnce({
+      currency: "USD",
+      window: { from: "2026-08-14", to: "2026-09-12" },
+      dataDays: 40,
+      insufficientData: false,
+      channels: [{ id: "c1", name: "TikTok Shop", kind: "TIKTOK_SHOP" }],
+      recurring: [{ slug: "canva", memo: "CANVA", cadence: "monthly", amountMinor: 2999, prevAmountMinor: 1299, deltaPct: 130.9, lastDate: "2026-09-06", occurrences: 3 }],
+      processors: [{ key: "stripe", name: "Stripe", balanceMinor: 63000, lastPayoutDate: "2026-09-01", daysSinceLastPayout: 11 }],
+      metrics: [
+        m("runway_days", "Runway", 170, "days", "170 days"),
+        m("net_burn_30d", "Net burn", 15000, "minor", "$150.00", { prev: { value: 9000, display: "$90.00" } }),
+        m("gross_margin_30d", "Gross margin", 55000, "minor", "$550.00"),
+        m("gross_margin_pct_30d", "Gross margin rate", 55, "percent", "55.0%"),
+        m("ad_spend_30d", "Ad spend", 25000, "minor", "$250.00"),
+        m("roas_30d", "Blended ROAS", 4, "ratio", "4.0x"),
+        m("processor_fees_30d", "Processor fees", 5000, "minor", "$50.00"),
+        m("fee_rate_30d", "Effective fee rate", 5, "percent", "5.0%"),
+        m("recurring_monthly_total", "Recurring charges per month", 2999, "minor", "$29.99", { note: "1 recurring charge detected over 90 days." }),
+        m("clearing_balance", "Earned, not yet deposited", 63000, "minor", "$630.00"),
+        m("channel:c1:revenue", "TikTok Shop revenue", 100000, "minor", "$1,000.00"),
+        m("channel:c1:fee_rate", "TikTok Shop fee rate", 5, "percent", "5.0%"),
+        m("channel:c1:cogs", "TikTok Shop COGS", 40000, "minor", "$400.00"),
+        m("channel:c1:ad_spend", "TikTok Shop ad spend", 25000, "minor", "$250.00"),
+        m("channel:c1:gross_margin", "TikTok Shop gross margin", 55000, "minor", "$550.00"),
+        m("channel:c1:gross_margin_pct", "TikTok Shop gross margin rate", 55, "percent", "55.0%"),
+        m("channel:c1:roas", "TikTok Shop ROAS", 4, "ratio", "4.0x"),
+      ],
+    });
+    renderOverview();
+    expect(await screen.findByText(/about 170 days of runway/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Numbers" })).toBeInTheDocument();
+    expect(screen.getByText("was $90.00")).toBeInTheDocument();
+    expect(screen.getByText(/blended ROAS 4.0x/)).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /TikTok Shop/ })).toHaveTextContent("$1,000.005.0%$400.00$250.00$550.00 · 55.0%4.0x");
+    expect(screen.getByText("CANVA")).toBeInTheDocument();
+    expect(screen.getByText(/up 131%/)).toBeInTheDocument();
+    expect(screen.getByText(/Stripe: 11 days since the last payout/)).toBeInTheDocument();
   });
 
   it("surfaces a load error with a retry", async () => {
