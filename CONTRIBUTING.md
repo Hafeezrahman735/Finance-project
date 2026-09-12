@@ -6,7 +6,7 @@ See `docs/setup.md`. One `npm install` at the root; never inside `apps/*`.
 
 ## Branches and PRs
 
-- Branch from `main`; name by lane: `slice1/pr-b-typescript-port`, `slice1/csv-import`, `slice2/orders-cogs`.
+- Branch from `master`; name by lane: `slice1/pr-b-typescript-port`, `slice1/csv-import`, `slice2/orders-cogs`.
 - Keep PRs to one lane. The Slice 1 foundations land as four PRs (workspaces, TypeScript port, Prisma + ledger, cut over) so each is independently revertible.
 - Migrations are additive within a release; drops wait one release. No backfills inside migrations; backfills are jobs.
 - Every PR that adds a route adds it to the route table so the generated authz matrix covers it (from PR b onward).

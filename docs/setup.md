@@ -11,7 +11,7 @@ Target: clone to running app in under 5 minutes. Time yourself; if it takes long
 ## 2. Install
 
 ```bash
-git clone https://github.com/Hafeezrahman735/Expense-Tracker.git ledgeriq
+git clone https://github.com/Hafeezrahman735/Finance-project.git ledgeriq
 cd ledgeriq
 npm install
 ```
