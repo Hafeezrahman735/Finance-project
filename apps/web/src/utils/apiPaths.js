@@ -20,6 +20,14 @@ export const API_PATHS = {
   DASHBOARD: {
     GET_DATA: "/api/v1/dashboard",
   },
+  BANK_ACCOUNTS: { LIST: "/api/v1/bank-accounts" },
+  IMPORTS: {
+    LIST: "/api/v1/imports",
+    ONE: (id) => `/api/v1/imports/${id}`,
+    MAPPING: (id) => `/api/v1/imports/${id}/mapping`,
+    COMMIT: (id) => `/api/v1/imports/${id}/commit`,
+  },
+  RULES: { LIST: "/api/v1/rules", ONE: (id) => `/api/v1/rules/${id}` },
   TRANSACTIONS: {
     LIST: "/api/v1/transactions",
     ONE: (id) => `/api/v1/transactions/${id}`,

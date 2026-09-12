@@ -96,6 +96,10 @@ Run one side only with `npm run dev:api` or `npm run dev:web`.
 - **`password authentication failed for user "ledgeriq"`** — the role was not created; run `scripts/create-local-db.sql` as a superuser (section 2A).
 - **Windows: `'tsx' is not recognized`** — run scripts through npm (`npm run dev:api`), not by calling binaries directly; the root install puts them under the root `node_modules/.bin`.
 
+## Importing a statement
+
+Transactions → Import (or the Overview's first action). Add the bank account once, drop the CSV your bank exported, confirm the four column questions (the first three values of each column are shown as proof; if every day in the file is ≤ 12 you are asked whether dates are day-first), review the counts, import. Re-uploading the same file reports every row as a duplicate; tick a row to import it anyway. Rules created from the category picker ("Always categorize … this way") apply on the way in. Files up to 10 MB / 50,000 rows.
+
 ## What changes next
 
 The Slice 1 feature lanes add Plaid, Anthropic, and Resend as optional keys whose features switch off when absent, plus the Transactions page, CSV import, the Overview metrics, and the weekly brief (`docs/architecture.md`).

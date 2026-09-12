@@ -45,7 +45,7 @@ describe("Overview", () => {
     dashboard.get.mockResolvedValue(base);
     renderOverview();
     expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent("Nothing recorded yet. Add a transaction and this line will tell you what happened.");
-    expect(screen.getByRole("button", { name: "Add a transaction" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Import a statement" })).toBeInTheDocument();
     expect(screen.queryByText("Last 30 days")).not.toBeInTheDocument();
   });
 

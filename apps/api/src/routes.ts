@@ -1,12 +1,17 @@
 import { Router, type Request, type RequestHandler, type Response } from "express";
+import multer from "multer";
 import { z } from "zod";
 import type { Config } from "./config.js";
 import type { Db } from "./db/prisma.js";
 import { MembershipRole } from "./generated/prisma/enums.js";
+import { ValidationError as ValidationErrorForRoute } from "./lib/errors.js";
 import { sendWorkbook } from "./lib/excel.js";
 import { protect, requireOrg } from "./middleware/auth.js";
 import { body, validateBody } from "./middleware/validate.js";
 import { authService, loginSchema, registerSchema, toUserDTO } from "./services/auth/auth.js";
+import { bankAccountsService, createBankAccountSchema } from "./services/banking/bankAccounts.js";
+import { importsService, MAX_FILE_BYTES } from "./services/banking/imports.js";
+import { createRuleSchema, rulesService } from "./services/rules/rules.js";
 import { dashboardService } from "./services/dashboard/dashboard.js";
 import { createSchema, listQuerySchema, transactionsService, updateSchema } from "./services/transactions/transactions.js";
 
@@ -39,6 +44,10 @@ export function routeTable(db: Db, config: Config): RouteDef[] {
   const auth = authService(db, config);
   const txns = transactionsService(db);
   const dashboard = dashboardService(db);
+  const banks = bankAccountsService(db);
+  const imports = importsService(db);
+  const rules = rulesService(db);
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_FILE_BYTES, files: 1 } });
   const FOREIGN = "00000000-0000-4000-8000-000000000000";
 
   const orgDTO = (req: Request) => ({ id: req.org!.id, name: req.org!.name, currency: req.org!.currency, timezone: req.org!.timezone, role: req.org!.role });
@@ -98,6 +107,34 @@ export function routeTable(db: Db, config: Config): RouteDef[] {
     { method: "post", path: "/transactions/:id/reverse", access: MembershipRole.BOOKKEEPER, example: FOREIGN, handler: async (req, res) => res.json(await txns.reverse(req.org!.id, param(req, "id"), actor(req))) },
     // DELETE is an alias for reverse: posted entries never disappear (ADR 0004).
     { method: "delete", path: "/transactions/:id", access: MembershipRole.BOOKKEEPER, example: FOREIGN, handler: async (req, res) => res.json({ message: "Transaction reversed", ...(await txns.reverse(req.org!.id, param(req, "id"), actor(req))) }) },
+
+    // --- bank accounts ----------------------------------------------------
+    { method: "get", path: "/bank-accounts", access: MembershipRole.VIEWER, handler: async (req, res) => res.json({ data: await banks.list(req.org!.id) }) },
+    { method: "post", path: "/bank-accounts", access: MembershipRole.BOOKKEEPER, handler: chain(validateBody(createBankAccountSchema), async (req, res) => res.status(201).json(await banks.create(req.org!.id, req.org!.currency, body<typeof createBankAccountSchema>(req), req.user!.id))) },
+
+    // --- imports (CSV) ----------------------------------------------------
+    { method: "get", path: "/imports", access: MembershipRole.VIEWER, handler: async (req, res) => res.json({ data: await imports.list(req.org!.id) }) },
+    {
+      method: "post",
+      path: "/imports",
+      access: MembershipRole.BOOKKEEPER,
+      handler: chain(upload.single("file") as RequestHandler, async (req, res) => {
+        const file = (req as Request & { file?: Express.Multer.File }).file;
+        const bankAccountId = z.string().uuid().safeParse(req.body?.bankAccountId);
+        if (!file) throw new ValidationErrorForRoute("Choose a CSV file", "file");
+        if (!bankAccountId.success) throw new ValidationErrorForRoute("Choose the bank account this statement belongs to", "bankAccountId");
+        res.status(201).json(await imports.upload(req.org!.id, bankAccountId.data, file.originalname, file.buffer, actor(req)));
+      }),
+    },
+    { method: "get", path: "/imports/:id", access: MembershipRole.VIEWER, example: FOREIGN, handler: async (req, res) => res.json(await imports.get(req.org!.id, param(req, "id"))) },
+    { method: "get", path: "/imports/:id/preview", access: MembershipRole.VIEWER, example: FOREIGN, handler: async (req, res) => res.json(await imports.preview(req.org!.id, param(req, "id"))) },
+    { method: "post", path: "/imports/:id/mapping", access: MembershipRole.BOOKKEEPER, example: FOREIGN, handler: async (req, res) => res.json(await imports.setMapping(req.org!.id, param(req, "id"), req.body)) },
+    { method: "post", path: "/imports/:id/commit", access: MembershipRole.BOOKKEEPER, example: FOREIGN, handler: async (req, res) => res.json(await imports.commit(req.org!.id, param(req, "id"), req.body ?? {}, actor(req))) },
+
+    // --- categorization rules ---------------------------------------------
+    { method: "get", path: "/rules", access: MembershipRole.VIEWER, handler: async (req, res) => res.json({ data: await rules.list(req.org!.id) }) },
+    { method: "post", path: "/rules", access: MembershipRole.BOOKKEEPER, handler: chain(validateBody(createRuleSchema), async (req, res) => res.status(201).json(await rules.create(req.org!.id, body<typeof createRuleSchema>(req), actor(req)))) },
+    { method: "delete", path: "/rules/:id", access: MembershipRole.BOOKKEEPER, example: FOREIGN, handler: async (req, res) => { await rules.remove(req.org!.id, param(req, "id"), actor(req)); res.json({ message: "Rule removed" }); } },
   ];
 }
 

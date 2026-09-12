@@ -29,6 +29,30 @@ export const dashboard = {
   get: () => axiosInstance.get(API_PATHS.DASHBOARD.GET_DATA).then((r) => r.data),
 };
 
+export const bankAccounts = {
+  list: () => axiosInstance.get(API_PATHS.BANK_ACCOUNTS.LIST).then((r) => r.data.data),
+  create: (body) => axiosInstance.post(API_PATHS.BANK_ACCOUNTS.LIST, body).then((r) => r.data),
+};
+
+export const imports = {
+  list: () => axiosInstance.get(API_PATHS.IMPORTS.LIST).then((r) => r.data.data),
+  get: (id) => axiosInstance.get(API_PATHS.IMPORTS.ONE(id)).then((r) => r.data),
+  upload: (bankAccountId, file) => {
+    const form = new FormData();
+    form.append("bankAccountId", bankAccountId);
+    form.append("file", file);
+    return axiosInstance.post(API_PATHS.IMPORTS.LIST, form, { headers: { "Content-Type": "multipart/form-data" }, timeout: 120000 }).then((r) => r.data);
+  },
+  setMapping: (id, mapping) => axiosInstance.post(API_PATHS.IMPORTS.MAPPING(id), mapping, { timeout: 300000 }).then((r) => r.data),
+  commit: (id, includeDuplicates = []) => axiosInstance.post(API_PATHS.IMPORTS.COMMIT(id), { includeDuplicates }, { timeout: 600000 }).then((r) => r.data),
+};
+
+export const rules = {
+  list: () => axiosInstance.get(API_PATHS.RULES.LIST).then((r) => r.data.data),
+  create: (body) => axiosInstance.post(API_PATHS.RULES.LIST, body).then((r) => r.data),
+  remove: (id) => axiosInstance.delete(API_PATHS.RULES.ONE(id)).then((r) => r.data),
+};
+
 export const transactions = {
   list: (params) => axiosInstance.get(API_PATHS.TRANSACTIONS.LIST, { params }).then((r) => r.data),
   create: (body) => axiosInstance.post(API_PATHS.TRANSACTIONS.LIST, body).then((r) => r.data),

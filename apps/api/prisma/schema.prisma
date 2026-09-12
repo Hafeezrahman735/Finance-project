@@ -62,6 +62,9 @@ model Organization {
   lines         JournalLine[]
   payouts       Payout[]
   auditLogs     AuditLog[]
+  bankAccounts  BankAccount[]
+  imports       Import[]
+  rules         CategoryRule[]
 
   @@map("organizations")
 }
@@ -115,8 +118,10 @@ model Account {
   createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   lines        JournalLine[]
+  bankAccounts BankAccount[]
+  rules        CategoryRule[]
 
   @@unique([organizationId, systemKey])
   @@unique([organizationId, code])
@@ -148,9 +153,10 @@ model SalesChannel {
   isArchived     Boolean          @default(false) @map("is_archived")
   createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   lines        JournalLine[]
   payouts      Payout[]
+  rules        CategoryRule[]
 
   @@unique([organizationId, name])
   @@map("sales_channels")
@@ -299,4 +305,143 @@ model AuditLog {
   @@index([organizationId, entityType, entityId])
   @@index([organizationId, createdAt(sort: Desc)])
   @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Bank accounts, CSV imports, categorization rules (Slice 1, lane 1.4a)
+// ---------------------------------------------------------------------------
+
+enum BankAccountKind {
+  CHECKING
+  SAVINGS
+  CREDIT_CARD
+  CASH
+  OTHER
+}
+
+model BankAccount {
+  id             String          @id @default(uuid()) @db.Uuid
+  organizationId String          @map("organization_id") @db.Uuid
+  name           String
+  kind           BankAccountKind @default(CHECKING)
+  /// The ledger account this bank account posts to (asset, or liability for credit cards). systemKey "bank:<id>".
+  accountId      String          @map("account_id") @db.Uuid
+  currency       String          @db.Char(3)
+  /// Last four digits or similar, display only.
+  mask           String?
+  isArchived     Boolean         @default(false) @map("is_archived")
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account      Account      @relation(fields: [accountId], references: [id])
+  imports      Import[]
+
+  @@unique([organizationId, name])
+  @@map("bank_accounts")
+}
+
+enum ImportStatus {
+  UPLOADED
+  MAPPED
+  COMMITTING
+  COMMITTED
+  FAILED
+}
+
+/// One uploaded statement. Rows are parsed once with the chosen mapping, then
+/// committed in batches of 500 so a failure mid-file leaves earlier batches in
+/// place and the rest resumable (eng review F16).
+model Import {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  bankAccountId  String       @map("bank_account_id") @db.Uuid
+  filename       String
+  status         ImportStatus @default(UPLOADED)
+  /// Header names as found in the file.
+  columns        Json
+  /// The mapping the user confirmed: { dateColumn, descriptionColumn, amountColumn | debitColumn + creditColumn, dateFormat, signConvention }.
+  mapping        Json?
+  rowCount       Int          @default(0) @map("row_count")
+  newCount       Int          @default(0) @map("new_count")
+  duplicateCount Int          @default(0) @map("duplicate_count")
+  invalidCount   Int          @default(0) @map("invalid_count")
+  importedCount  Int          @default(0) @map("imported_count")
+  error          String?
+  createdById    String?      @map("created_by_id") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bankAccount  BankAccount  @relation(fields: [bankAccountId], references: [id])
+  rows         ImportRow[]
+
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@map("imports")
+}
+
+enum ImportRowStatus {
+  PENDING
+  NEW
+  DUPLICATE
+  INVALID
+  SKIPPED
+  IMPORTED
+}
+
+model ImportRow {
+  id             String          @id @default(uuid()) @db.Uuid
+  importId       String          @map("import_id") @db.Uuid
+  organizationId String          @map("organization_id") @db.Uuid
+  index          Int
+  /// The raw cells, keyed by header, exactly as read.
+  raw            Json
+  date           DateTime?       @db.Date
+  description    String?
+  /// Signed minor units after the sign convention: positive = money in.
+  amountMinor    BigInt?         @map("amount_minor")
+  /// Dedupe key (eng review F6): bank account + date + amount + normalized description + occurrence index.
+  dedupeHash     String?         @map("dedupe_hash")
+  status         ImportRowStatus @default(PENDING)
+  /// Why the row is INVALID, in words the user can act on.
+  problem        String?
+  /// The entry this row created (IMPORTED rows).
+  entryId        String?         @map("entry_id") @db.Uuid
+
+  import Import @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  @@unique([importId, index])
+  @@index([organizationId, dedupeHash])
+  @@map("import_rows")
+}
+
+enum RuleMatch {
+  CONTAINS
+  EXACT
+  REGEX
+}
+
+/// "Always categorize X this way." Applied on import (first match by priority)
+/// and, optionally, to existing uncategorized rows when created.
+model CategoryRule {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  match          RuleMatch @default(CONTAINS)
+  /// Compared case-insensitively against the normalized description.
+  pattern        String
+  accountId      String    @map("account_id") @db.Uuid
+  channelId      String?   @map("channel_id") @db.Uuid
+  priority       Int       @default(100)
+  hitCount       Int       @default(0) @map("hit_count")
+  isArchived     Boolean   @default(false) @map("is_archived")
+  createdById    String?   @map("created_by_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account      Account       @relation(fields: [accountId], references: [id])
+  channel      SalesChannel? @relation(fields: [channelId], references: [id])
+
+  @@index([organizationId, priority])
+  @@map("category_rules")
 }

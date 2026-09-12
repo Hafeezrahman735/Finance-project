@@ -43,7 +43,7 @@ export default function Overview() {
   const primary = !data
     ? null
     : !hasAnyData
-      ? { label: "Add a transaction", to: "/transactions", hint: "CSV import and bank connections are next." }
+      ? { label: "Import a statement", to: "/import", hint: "Or add a transaction by hand on the Transactions page." }
       : data.uncategorizedCount > 0
         ? { label: `Categorize ${data.uncategorizedCount}`, to: "/transactions", hint: "Your numbers firm up as the queue empties." }
         : { label: "Review transactions", to: "/transactions", hint: null };

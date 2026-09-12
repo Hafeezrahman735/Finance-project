@@ -67,7 +67,15 @@ describe("CategoryPicker", () => {
     expect(screen.getByText("Software and subscriptions")).toBeInTheDocument();
     expect(screen.queryByText("Rent")).not.toBeInTheDocument();
     await userEvent.click(screen.getByText("Software and subscriptions"));
-    expect(onPick).toHaveBeenCalledWith([{ accountId: "a-soft", amountMinor: 3080 }]);
+    expect(onPick).toHaveBeenCalledWith([{ accountId: "a-soft", amountMinor: 3080 }], null);
+  });
+
+  it("offers an 'always categorize this way' rule when the row has a description", async () => {
+    const onPick = vi.fn();
+    render(<CategoryPicker open onClose={() => {}} accounts={accounts} amountMinor={3080} direction="out" current={txn.lines} memo="PIRATE SHIP" onPick={onPick} />);
+    await userEvent.click(screen.getByRole("checkbox", { name: /always categorize/i }));
+    await userEvent.click(screen.getByText("Rent"));
+    expect(onPick).toHaveBeenCalledWith([{ accountId: "a-rent", amountMinor: 3080 }], { pattern: "PIRATE SHIP" });
   });
 
   it("splits only when the lines sum to the amount", async () => {

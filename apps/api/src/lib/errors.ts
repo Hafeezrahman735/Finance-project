@@ -76,6 +76,13 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     res.status(400).json(envelope(400, "validation_error", "invalid_param", message, req.id, param));
     return;
   }
+  // multer: file too large / wrong field
+  if (typeof err === "object" && err !== null && (err as { name?: string }).name === "MulterError") {
+    const code = (err as { code?: string }).code;
+    const message = code === "LIMIT_FILE_SIZE" ? "File is larger than 10 MB; split it and import in parts" : `Upload rejected (${code ?? "unknown"})`;
+    res.status(400).json(envelope(400, "validation_error", code === "LIMIT_FILE_SIZE" ? "file_too_large" : "upload_rejected", message, req.id, "file"));
+    return;
+  }
   // Malformed JSON body from express.json()
   if (typeof err === "object" && err !== null && (err as { type?: string }).type === "entity.parse.failed") {
     res.status(400).json(envelope(400, "validation_error", "invalid_json", "Request body is not valid JSON", req.id));

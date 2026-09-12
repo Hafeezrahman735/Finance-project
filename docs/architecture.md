@@ -2,7 +2,7 @@
 
 Two views: what runs today, and the target the roadmap builds toward. Decisions behind the target are recorded in `docs/adr/`.
 
-## Today (Slice 1, lane 1.3)
+## Today (Slice 1, lane 1.4a)
 
 ```
   apps/web (React 19 + Vite + Tailwind 4)             apps/api (Express 5, TypeScript, ESM)
@@ -15,7 +15,10 @@ Two views: what runs today, and the target the roadmap builds toward. Decisions 
   │ components/transactions: Row ·   │              │ services/ledger: post · reverse · recategorize ·│  ┌──────────┐
   │   CategoryPicker (+split) ·      │              │   lock · trial balance ─▶ Prisma 7 (pg adapter) ┼─▶│ Postgres │
   │   AddTransactionForm             │              │ prisma/schema.prisma + migration with triggers  │  └──────────┘
-  │ components/overview/InOutChart   │              │ fixtures/demoOrg · scripts/migrate-mongo-to-pg  │
+  │ components/overview/InOutChart   │              │ services/banking: csv (parse·guess·map·dedupe) ·│
+  │ pages/Import (3 steps) · Settings│              │   imports (upload·mapping·commit in batches) ·  │
+  │                                  │              │   bankAccounts · services/rules (match·apply)   │
+  │                                  │              │ fixtures/demoOrg · scripts/migrate-mongo-to-pg  │
   │ lib/api.js · lib/format.js       │              └────────────────────────────────────────────────┘
   │ index.css: @theme design tokens  │
   └──────────────────────────────────┘
@@ -28,7 +31,7 @@ MongoDB is gone from the runtime; `mongoose` remains a dev dependency for the on
 
 Tokens live in `apps/web/src/index.css` (`@theme`): two typefaces (Fraunces for the headline sentence, Manrope for UI), one accent (`--color-accent`), light theme, 6px radius, 16px body. No `box-shadow` except focus rings, no gradients, no cards as layout, no system font stacks. Motion: a 300ms opacity tween on the headline, nothing else. Every overlay is `components/ui/Sheet` (dialog on desktop, bottom sheet under 640px); every input goes through `components/ui/Field` (visible label, 44px). Add `check-styles:allow` to a line to exempt it, with a reason.
 
-Still pending for the Slice 1 lanes: refresh tokens, password reset, email verification (auth lane); CSV import and Plaid sandbox (1.4); metrics + Overview headline extensions (E1); the weekly brief (E8); Settings page; "always categorize X this way" rules (land with import).
+Still pending for the Slice 1 lanes: refresh tokens, password reset, email verification (auth lane); Plaid sandbox (1.4b); metrics + Overview headline extensions (E1); the weekly brief (E8).
 
 ## Target
 

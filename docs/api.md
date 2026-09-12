@@ -28,6 +28,17 @@ Source of truth: the route table in `apps/api/src/routes.ts`. Every route there 
 | PATCH | `/transactions/:id` | BOOKKEEPER | `version` + either `lines: [{ accountId, amountMinor, channelId? }]` (recategorize/split, any source) or `amountMinor/date/memo/direction` (manual entries only; returns a **new** id) | `Transaction` |
 | POST | `/transactions/:id/reverse` | BOOKKEEPER | — | `{ original, reversal }` |
 | DELETE | `/transactions/:id` | BOOKKEEPER | — | alias for reverse; `{ message, original, reversal }` |
+| GET | `/bank-accounts` | VIEWER | — | `{ data: [ { id, name, kind, accountId, currency, mask } ] }` |
+| POST | `/bank-accounts` | BOOKKEEPER | `name, kind=CHECKING\|SAVINGS\|CREDIT_CARD\|CASH\|OTHER, mask?` | `201 BankAccount` (creates its ledger account, systemKey `bank:<id>`) |
+| GET | `/imports` | VIEWER | — | `{ data: Import[] }` (last 50) |
+| POST | `/imports` | BOOKKEEPER | multipart: `file` (CSV ≤ 10 MB, ≤ 50,000 rows), `bankAccountId` | `201 { import, guess: { mapping, evidence, dateAmbiguous }, sample }` |
+| GET | `/imports/:id` | VIEWER | — | `Import` (status, counts, mapping, error) |
+| GET | `/imports/:id/preview` | VIEWER | — | `{ newRows, duplicateRows, invalidRows }` |
+| POST | `/imports/:id/mapping` | BOOKKEEPER | `dateColumn, descriptionColumn, amountColumn \| debitColumn+creditColumn, dateFormat=auto\|YMD\|MDY\|DMY, signConvention=negativeIsOut\|positiveIsOut` | `{ import, preview }`; rows become NEW / DUPLICATE / INVALID |
+| POST | `/imports/:id/commit` | BOOKKEEPER | `includeDuplicates?: number[]` (row indexes to import anyway) | `Import` with status COMMITTED; batches of 500; safe to call again after a failure (resumes) |
+| GET | `/rules` | VIEWER | — | `{ data: [ { id, pattern, match, accountId, accountName, channelId, priority, hitCount } ] }` |
+| POST | `/rules` | BOOKKEEPER | `pattern, match=CONTAINS\|EXACT\|REGEX, accountId, channelId?, priority?, applyToExisting=true` | `201 { rule, applied }` (`applied` = uncategorized rows recategorized now) |
+| DELETE | `/rules/:id` | BOOKKEEPER | — | archives the rule |
 
 `GET /healthz` (no prefix) returns `{ ok: true }` after a `SELECT 1`.
 
@@ -64,7 +75,9 @@ Source of truth: the route table in `apps/api/src/routes.ts`. Every route there 
 | `missing_token`, `invalid_token`, `unknown_user`, `invalid_credentials`, `no_organization` | 401 | authentication |
 | `insufficient_role` | 403 | role below the route's minimum |
 | `not_found`, `entry_not_found`, `organization_not_found`, `route_not_found` | 404 | includes foreign ids and malformed ids |
-| `email_taken` | 409 | register |
+| `email_taken`, `bank_account_exists` | 409 | register / bank accounts |
+| `import_not_mapped`, `import_committed` | 409 | import step out of order |
+| `file_too_large`, `too_many_rows` | 400 | upload limits |
 | `stale_version` | 409 | the entry changed since you loaded it; reload and retry |
 | `entry_locked`, `invalid_transition` | 409 | reconciled/closed entry, or an operation the entry's state does not allow |
 | `unbalanced_entry`, `invalid_line`, `currency_mismatch` | 422 | ledger validation |

@@ -5,8 +5,9 @@ import AddTransactionForm from "../components/transactions/AddTransactionForm";
 import CategoryPicker from "../components/transactions/CategoryPicker";
 import TransactionRow from "../components/transactions/TransactionRow";
 import Button from "../components/ui/Button";
+import { useNavigate } from "react-router-dom";
 import { useUserAuth } from "../hooks/useUserAuth";
-import { accounts as accountsApi, errorCode, errorMessage, transactions as txApi } from "../lib/api";
+import { accounts as accountsApi, errorCode, errorMessage, rules as rulesApi, transactions as txApi } from "../lib/api";
 import { money } from "../lib/format";
 
 const FILTERS = [
@@ -24,6 +25,7 @@ const FILTERS = [
  */
 export default function Transactions() {
   useUserAuth();
+  const navigate = useNavigate();
   const [filter, setFilter] = useState("all");
   const [queue, setQueue] = useState([]); // uncategorized (always fetched; shown first)
   const [rows, setRows] = useState([]); // the filtered list (may overlap queue; de-duplicated on render)
@@ -126,13 +128,22 @@ export default function Transactions() {
     return updated;
   };
 
-  const onPick = async (lines) => {
+  const onPick = async (lines, rule) => {
     const target = picker;
     setPicker(null);
     if (!target) return;
     if (target.t) {
       try {
         await categorize(target.t, lines);
+        if (rule && lines.length === 1) {
+          const created = await rulesApi.create({ pattern: rule.pattern, accountId: lines[0].accountId, applyToExisting: true });
+          if (created.applied > 0) {
+            toast.success(`Rule saved; ${created.applied} more categorized`);
+            load();
+          } else {
+            toast.success("Rule saved for future imports");
+          }
+        }
       } catch (err) {
         toast.error(errorCode(err) === "stale_version" ? "This row changed elsewhere; reloading." : errorMessage(err));
         if (errorCode(err) === "stale_version") load();
@@ -228,6 +239,7 @@ export default function Transactions() {
           <p className="mt-1 hidden text-muted sm:block">Press <kbd className="rounded-ui border border-line px-1">n</kbd> to add, <kbd className="rounded-ui border border-line px-1">?</kbd> for shortcuts.</p>
         </div>
         <div className="flex gap-2">
+          <Button onClick={() => navigate("/import")}>Import</Button>
           <Button onClick={() => txApi.exportXlsx(filter === "in" || filter === "out" ? filter : undefined).catch((err) => toast.error(errorMessage(err, "Export failed")))}>
             Export
           </Button>
@@ -346,6 +358,7 @@ export default function Transactions() {
         direction={pickerTarget?.direction ?? "out"}
         current={pickerTarget ? pickerTarget.lines.map((l) => ({ accountId: l.accountId, amountMinor: l.amountMinor })) : []}
         title={pickerTarget ? `Category for ${money(pickerTarget.amountMinor, currency)}` : `Category for ${picker?.ids?.length ?? 0} transactions`}
+        memo={pickerTarget?.memo ?? ""}
         onPick={onPick}
       />
       <AddTransactionForm open={adding} onClose={() => setAdding(false)} accounts={accounts} currency={currency} onSubmit={onAdd} busy={busy} />

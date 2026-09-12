@@ -6,6 +6,8 @@ import Login from "./pages/Auth/Login";
 import SignUp from "./pages/Auth/SignUp";
 import Overview from "./pages/Overview";
 import Transactions from "./pages/Transactions";
+import Import from "./pages/Import";
+import Settings from "./pages/Settings";
 
 export default function App() {
   return (
@@ -19,6 +21,8 @@ export default function App() {
           <Route path="/overview" element={<Overview />} />
           <Route path="/dashboard" element={<Navigate to="/overview" replace />} />
           <Route path="/transactions" element={<Transactions />} />
+          <Route path="/import" element={<Import />} />
+          <Route path="/settings" element={<Settings />} />
           <Route path="/income" element={<Navigate to="/transactions" replace />} />
           <Route path="/expense" element={<Navigate to="/transactions" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />

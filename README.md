@@ -2,7 +2,7 @@
 
 A web-based financial admin platform for solo and micro-business owners, evolving from the original Expense Tracker. The destination is a double-entry ledger with bank feeds, invoicing, reports, and a grounded AI "Money Brief" that turns bookkeeping data into a specific next action. The roadmap, design decisions, and review history live in `docs/` and the ADRs in `docs/adr/`.
 
-**Current state (Slice 1, lane 1.3):** the app runs entirely on Postgres with a double-entry ledger underneath (`docs/ledger.md`), organization-scoped, role-checked routes (`docs/api.md`), and a new UI: an **Overview** that leads with one plain-language sentence about the last 30 days, and a **Transactions** page with an uncategorized-first list, a searchable category picker with splits, undo, bulk categorize, keyboard shortcuts, and a mobile layout. Design tokens (two typefaces, one accent, light theme, no cards/shadows/gradients) are lint-enforced. Next lanes: CSV import, Overview metrics, the weekly AI brief (`docs/architecture.md`).
+**Current state (Slice 1, lane 1.4a):** CSV statement import is in: add a bank account, drop a CSV, answer four questions (date, description, amount or debit/credit, sign) with the first three values shown as proof, preview new / duplicate / unreadable rows, import in resumable batches; categorization rules ("always categorize X this way") apply on import and to the existing queue. Previously (lane 1.3): the app runs entirely on Postgres with a double-entry ledger underneath (`docs/ledger.md`), organization-scoped, role-checked routes (`docs/api.md`), and a new UI: an **Overview** that leads with one plain-language sentence about the last 30 days, and a **Transactions** page with an uncategorized-first list, a searchable category picker with splits, undo, bulk categorize, keyboard shortcuts, and a mobile layout. Design tokens (two typefaces, one accent, light theme, no cards/shadows/gradients) are lint-enforced. Next lanes: CSV import, Overview metrics, the weekly AI brief (`docs/architecture.md`).
 
 ## Repository layout
 
@@ -41,6 +41,8 @@ Other root scripts: `npm run dev:api`, `npm run dev:web`, `npm run build` (web),
 - Overview: headline sentence for the last 30 days (present in empty and partial states too), cash on hand, one primary action, 30-day in/out chart with a screen-reader table, recent activity
 - Transactions: uncategorized rows first with an accent, filters (needs a category / all / in / out), search, cursor-paginated Load more, category picker (searchable, grouped, split mode), 8-second undo, bulk categorize with partial-failure retry, add-transaction sheet, xlsx export
 - Keyboard: `n` add, `/` search, `j`/`k` move, `c` categorize, `x` select, `?` help; 44px targets, visible labels, focus rings, `aria-live` headline
+- Import: bank accounts (each its own ledger account), CSV upload with delimiter/BOM/quote handling, mapping guess with evidence, DD/MM vs MM/DD detection, `(12.34)` / `$1,234.56` amounts, dedupe that keeps two identical same-day rows apart but catches re-uploads, batched commit with resume, import history
+- Rules: created from the category picker or the API, first match wins, applied on import and (optionally) to existing uncategorized rows; managed in Settings
 - Every read and write is organization-scoped; foreign ids are 404s; auth responses never include the password hash
 - Request ids on every response and a structured error envelope (`{ message, error: { type, code, param?, requestId } }`)
 

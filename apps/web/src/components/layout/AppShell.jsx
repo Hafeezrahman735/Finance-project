@@ -7,6 +7,8 @@ import Sheet from "../ui/Sheet";
 const NAV = [
   { key: "overview", label: "Overview", to: "/overview" },
   { key: "transactions", label: "Transactions", to: "/transactions" },
+  { key: "import", label: "Import", to: "/import" },
+  { key: "settings", label: "Settings", to: "/settings" },
 ];
 
 /**

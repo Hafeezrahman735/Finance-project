@@ -28,7 +28,7 @@ See `docs/setup.md`. One `npm install` at the root; never inside `apps/*`.
 
 Tests: every route gets a happy-path test and a validation test; auth, roles, and cross-organization access are covered by the authz matrix for free. Add to `apps/api/test/`; `helpers.ts` gives you `makeApp(db)`, `signup()`, `invite()`, and `auth(session)`; `pg.ts` gives you `usePg()` and `createOrgFixture()` for ledger tests. Anything that changes ledger rules also needs a raw-Prisma test proving the database rejects the bypass (see `ledger.test.ts` → database invariants).
 
-Schema changes: edit `apps/api/prisma/schema.prisma`, run `npm run db:migrate:dev -w @ledgeriq/api -- --name <change>`, and if the change touches ledger rules add the SQL for triggers/checks to the generated migration by hand (Prisma does not model them). Migrations are additive within a release.
+Schema changes: edit `apps/api/prisma/schema.prisma`, run `npm run db:migrate:dev -w @ledgeriq/api -- --name <change>` (the `ledgeriq` role needs `CREATEDB` for Prisma's shadow database; `scripts/create-local-db.sql` grants it, or generate the SQL offline with `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` into a new `prisma/migrations/<timestamp>_<name>/migration.sql` and apply with `db:migrate`), and if the change touches ledger rules add the SQL for triggers/checks to the generated migration by hand (Prisma does not model them). Migrations are additive within a release.
 
 ## Conventions
 

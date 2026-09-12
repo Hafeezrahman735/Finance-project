@@ -19,14 +19,16 @@ const TYPE_LABEL = { INCOME: "Money in", EXPENSE: "Money out", ASSET: "Assets", 
  *   current      [{ accountId, amountMinor }] existing lines (for split defaults)
  *   onPick(lines) → lines = [{ accountId, amountMinor }]
  */
-export default function CategoryPicker({ open, onClose, accounts, amountMinor, currency = "USD", direction, current = [], title = "Category", onPick }) {
+export default function CategoryPicker({ open, onClose, accounts, amountMinor, currency = "USD", direction, current = [], title = "Category", memo = "", onPick }) {
   const [query, setQuery] = useState("");
+  const [makeRule, setMakeRule] = useState(false);
   const [split, setSplit] = useState(current.length > 1);
   const [rows, setRows] = useState(() => splitRows(current, amountMinor));
 
   useEffect(() => {
     if (open) {
       setQuery("");
+      setMakeRule(false);
       setSplit(current.length > 1);
       setRows(splitRows(current, amountMinor));
     }
@@ -51,7 +53,7 @@ export default function CategoryPicker({ open, onClose, accounts, amountMinor, c
         <Combobox
           value={null}
           onChange={(account) => {
-            if (account) onPick([{ accountId: account.id, amountMinor }]);
+            if (account) onPick([{ accountId: account.id, amountMinor }], makeRule && memo ? { pattern: memo } : null);
           }}
         >
           <ComboboxInput
@@ -75,7 +77,17 @@ export default function CategoryPicker({ open, onClose, accounts, amountMinor, c
               </div>
             ))}
           </ComboboxOptions>
-          <div className="mt-3 border-t border-line pt-3">
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3">
+            {memo ? (
+              <label className="flex min-h-11 cursor-pointer items-center gap-2 text-base">
+                <input type="checkbox" className="h-5 w-5 accent-accent" checked={makeRule} onChange={(e) => setMakeRule(e.target.checked)} />
+                <span>
+                  Always categorize <span className="font-medium">“{memo.length > 32 ? memo.slice(0, 32) + "…" : memo}”</span> this way
+                </span>
+              </label>
+            ) : (
+              <span />
+            )}
             <Button variant="ghost" onClick={() => setSplit(true)}>
               Split across categories
             </Button>
