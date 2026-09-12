@@ -1,0 +1,11 @@
+{
+  "name": "@ledgeriq/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Schemas, money and date helpers, and types shared by the API and web app (scaffold; filled in during the TypeScript port)",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  }
+}

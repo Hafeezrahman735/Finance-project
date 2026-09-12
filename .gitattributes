@@ -1,0 +1,14 @@
+# Normalize line endings in the repo to LF; checkout uses LF too so scripts and
+# fixtures behave the same on Windows, macOS, Linux, and CI.
+* text=auto eol=lf
+
+# CSV/OFX test fixtures must keep their exact bytes (CRLF, BOM) so the import
+# parser is tested against what banks actually export.
+*.csv -text
+*.ofx -text
+
+# Binary assets
+*.png binary
+*.jpg binary
+*.ico binary
+*.xlsx binary

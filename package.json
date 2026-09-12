@@ -1,0 +1,25 @@
+{
+  "name": "ledgeriq",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LedgerIQ monorepo: API, web app, and shared package (evolving from the Expense Tracker)",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,green \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "npm run dev --workspace @ledgeriq/api",
+    "dev:web": "npm run dev --workspace @ledgeriq/web",
+    "build": "npm run build --workspace @ledgeriq/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "ci": "npm run lint && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
