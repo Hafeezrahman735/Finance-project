@@ -12,7 +12,28 @@ concurrency:
 jobs:
   ci:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+
+    # Postgres for the ledger tests (TEST_DATABASE_URL). Free on GitHub-hosted runners.
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: ledgeriq
+          POSTGRES_PASSWORD: ledgeriq
+          POSTGRES_DB: ledgeriq_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ledgeriq -d ledgeriq_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_URL: postgresql://ledgeriq:ledgeriq@localhost:5432/ledgeriq_test
+      # prisma generate (postinstall) does not connect, but prisma.config.ts reads the variable.
+      DATABASE_URL: postgresql://ledgeriq:ledgeriq@localhost:5432/ledgeriq_test
+
     steps:
       - uses: actions/checkout@v4
 
@@ -22,7 +43,7 @@ jobs:
           cache: npm
 
       # mongodb-memory-server downloads a mongod binary on first run; cache it
-      # so the test job does not spend a minute downloading on every push.
+      # so the legacy API tests do not spend a minute downloading on every push.
       - name: Cache mongod binary
         uses: actions/cache@v4
         with:

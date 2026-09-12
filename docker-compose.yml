@@ -1,0 +1,26 @@
+# Optional: local Postgres for people who prefer Docker. Not required; any
+# Postgres reachable via DATABASE_URL works (docs/setup.md#2-postgres).
+#
+#   docker compose up -d
+#   DATABASE_URL=postgresql://ledgeriq:ledgeriq@localhost:5432/ledgeriq
+#   TEST_DATABASE_URL=postgresql://ledgeriq:ledgeriq@localhost:5432/ledgeriq_test
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ledgeriq
+      POSTGRES_PASSWORD: ledgeriq
+      POSTGRES_DB: ledgeriq
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/create-test-db.sql:/docker-entrypoint-initdb.d/create-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ledgeriq -d ledgeriq"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:

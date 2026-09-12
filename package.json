@@ -18,7 +18,10 @@
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "ci": "npm run lint && npm run typecheck && npm run test && npm run build"
+    "ci": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "setup": "npm run db:migrate --workspace @ledgeriq/api && npm run db:seed --workspace @ledgeriq/api",
+    "db:migrate": "npm run db:migrate --workspace @ledgeriq/api",
+    "db:seed": "npm run db:seed --workspace @ledgeriq/api"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

@@ -21,10 +21,14 @@ See `docs/setup.md`. One `npm install` at the root; never inside `apps/*`.
 | `npm run build` | web production build |
 | `npm run lint` | ESLint in every workspace (must be clean) |
 | `npm run typecheck` | `tsc --noEmit` for the API |
-| `npm run test` | API suite: Vitest + Supertest on an in-memory MongoDB (first run downloads mongod) |
+| `npm run test` | Shared tests + API suite. Ledger tests need `TEST_DATABASE_URL` (truncated!); legacy route tests use an in-memory MongoDB (first run downloads mongod) |
+| `npm run setup` | `prisma migrate deploy` + seed the demo organization |
+| `npm run db:migrate:dev -w @ledgeriq/api -- --name <change>` | Create a new migration after editing `prisma/schema.prisma` |
 | `npm run ci` | lint, typecheck, test, build in the same order as GitHub Actions |
 
-Tests: every route gets a happy-path test, a validation test, an auth-required test, and an ownership test (user A cannot touch user B's rows). Add to `apps/api/test/`; `helpers.ts` gives you `makeApp()`, `signup()`, and `auth(token)`.
+Tests: every route gets a happy-path test, a validation test, an auth-required test, and an ownership test (user A cannot touch user B's rows). Add to `apps/api/test/`; `helpers.ts` gives you `makeApp()`, `signup()`, and `auth(token)`; `pg.ts` gives you `usePg()` and `createOrgFixture()` for ledger tests. Anything that changes ledger rules also needs a raw-Prisma test proving the database rejects the bypass (see `ledger.test.ts` → database invariants).
+
+Schema changes: edit `apps/api/prisma/schema.prisma`, run `npm run db:migrate:dev -w @ledgeriq/api -- --name <change>`, and if the change touches ledger rules add the SQL for triggers/checks to the generated migration by hand (Prisma does not model them). Migrations are additive within a release.
 
 ## Conventions
 

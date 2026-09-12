@@ -9,3 +9,4 @@ One file per durable decision. Format: context, decision, consequences, status. 
 | 0003 | The organization is the tenant, not the user | Accepted 2026-09-11 |
 | 0004 | Imported entries are edited in place until locked | Accepted 2026-09-11 |
 | 0005 | Hybrid slice sequencing: ledger underneath, brief early | Accepted 2026-09-11 |
+| 0006 | Prisma 7 with the pg driver adapter; invariants as SQL triggers in migrations | Accepted 2026-09-12 |

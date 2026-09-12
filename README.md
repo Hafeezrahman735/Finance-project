@@ -2,14 +2,14 @@
 
 A web-based financial admin platform for solo and micro-business owners, evolving from the original Expense Tracker. The destination is a double-entry ledger with bank feeds, invoicing, reports, and a grounded AI "Money Brief" that turns bookkeeping data into a specific next action. The roadmap, design decisions, and review history live in `docs/` and the ADRs in `docs/adr/`.
 
-**Current state (Slice 1, PR b):** the original expense tracker in an npm-workspaces monorepo, with the API ported to TypeScript (Express 5, zod validation, pino logging, a structured error envelope, streamed Excel export) and a Vitest + Supertest suite running against an in-memory MongoDB. Same features and routes as before; the ownership bug on edits/deletes and the password-hash leak in auth responses are fixed. Postgres, the ledger, and the AI layer arrive in the following PRs (see `docs/architecture.md`).
+**Current state (Slice 1, PR c):** the API is TypeScript (Express 5, zod, pino, structured errors) and still serves the original routes from MongoDB, while the new **double-entry ledger** lives in Postgres via Prisma: organizations and memberships, a chart of accounts, journal entries with database-enforced invariants, sales channels and payouts for product brands, an audit log, a deterministic demo organization, and a verified migration of the old Mongo data. The cut-over PR (d) moves the routes onto the ledger; the AI layer follows (see `docs/architecture.md`, `docs/ledger.md`).
 
 ## Repository layout
 
 ```
 ledgeriq/
 ├── apps/
-│   ├── api/          # Express 5 + TypeScript API on Mongoose (moving to Prisma/Postgres)
+│   ├── api/          # Express 5 + TypeScript API; Prisma/Postgres ledger + legacy Mongoose routes
 │   └── web/          # React 19 + Vite app
 ├── packages/
 │   └── shared/       # Schemas, money and date helpers shared by api and web (scaffold)
@@ -20,18 +20,20 @@ ledgeriq/
 
 ## Running locally
 
-**Prerequisites:** Node.js 20+ (tested on 24), npm 10+, and a MongoDB connection string (a free MongoDB Atlas cluster works). Postgres replaces Mongo in a later PR.
+**Prerequisites:** Node.js 20+ (tested on 24), npm 10+, PostgreSQL (local, Docker, or a free Neon/Aiven tier), and until the cut-over PR a MongoDB connection string for the legacy routes.
 
 ```bash
 npm install                       # installs every workspace from the root
+psql -U postgres -h localhost -f scripts/create-local-db.sql   # once; or `docker compose up -d`
 cp apps/api/.env.example apps/api/.env
-# fill in MONGO_URL and JWT_SECRET (see docs/setup.md)
+# fill in DATABASE_URL, TEST_DATABASE_URL, MONGO_URL, JWT_SECRET (see docs/setup.md)
+npm run setup                     # migrate + seed the demo organization
 npm run dev                       # starts api (tsx watch) and web (Vite) together
 ```
 
 The web app runs on `http://localhost:5173` and proxies `/api` to the API on `http://localhost:8000`, so there is one origin and no CORS in development. Full walkthrough and troubleshooting: `docs/setup.md`.
 
-Other root scripts: `npm run dev:api`, `npm run dev:web`, `npm run build` (web), `npm run lint`, `npm run typecheck`, `npm run test` (in-memory Mongo, no Atlas needed), `npm run ci`.
+Other root scripts: `npm run dev:api`, `npm run dev:web`, `npm run build` (web), `npm run lint`, `npm run typecheck`, `npm run test` (Postgres test DB + in-memory Mongo), `npm run db:migrate`, `npm run db:seed`, `npm run ci`.
 
 ## Features (today)
 

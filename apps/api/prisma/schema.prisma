@@ -1,0 +1,302 @@
+// LedgerIQ schema (Slice 1, PR c). See docs/ledger.md and ADRs 0001-0004.
+//
+//   Organization ──< Membership >── User
+//        │
+//        ├──< Account          chart of accounts (system accounts keyed by systemKey)
+//        ├──< SalesChannel     product-brand dimension on lines
+//        ├──< JournalEntry ──< JournalLine      THE ledger (integer minor units)
+//        ├──< Payout           processor payout expectations (matching lands in Slice 2)
+//        └──< AuditLog         every mutation, with before/after
+//
+// Money: BIGINT minor units, never floats (ADR 0002).
+// Dates: DATE columns, interpreted in Organization.timezone (ADR 0004).
+// Invariants the database enforces (prisma/migrations/*/migration.sql, hand-written part):
+//   - each journal line has exactly one positive side (debit xor credit)
+//   - a POSTED entry's debits equal its credits (deferred constraint trigger)
+//   - locked entries and their lines cannot be updated or deleted
+//   - on a POSTED entry, bank-side lines and the entry date cannot change
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String   @id @default(uuid()) @db.Uuid
+  email         String   @unique
+  fullName      String   @map("full_name")
+  passwordHash  String   @map("password_hash")
+  /// Mongo _id of the user this row was migrated from; null for native signups.
+  legacyMongoId String?  @unique @map("legacy_mongo_id")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  memberships Membership[]
+  auditLogs   AuditLog[]
+
+  @@map("users")
+}
+
+model Organization {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  /// ISO 4217. One currency per organization at launch; lines carry it too so multi-currency can be added later.
+  currency  String   @default("USD") @db.Char(3)
+  /// IANA timezone used for "today", "last 30 days", and the weekly brief's Monday.
+  timezone  String   @default("America/New_York")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  memberships   Membership[]
+  accounts      Account[]
+  salesChannels SalesChannel[]
+  entries       JournalEntry[]
+  lines         JournalLine[]
+  payouts       Payout[]
+  auditLogs     AuditLog[]
+
+  @@map("organizations")
+}
+
+enum MembershipRole {
+  OWNER
+  ADMIN
+  BOOKKEEPER
+  ACCOUNTANT
+  VIEWER
+}
+
+model Membership {
+  id             String         @id @default(uuid()) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  userId         String         @map("user_id") @db.Uuid
+  role           MembershipRole
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@map("memberships")
+}
+
+// ---------------------------------------------------------------------------
+// Chart of accounts
+// ---------------------------------------------------------------------------
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  INCOME
+  EXPENSE
+}
+
+model Account {
+  id             String      @id @default(uuid()) @db.Uuid
+  organizationId String      @map("organization_id") @db.Uuid
+  type           AccountType
+  name           String
+  /// Optional numeric code shown to accountants (1000, 4000...). Unique per org when present.
+  code           String?
+  /// Stable key for accounts the system needs to find: "uncategorized", "opening_balance",
+  /// "sales", "cogs", "processor_fees", "clearing:stripe", "clearing:shopify_payments", ...
+  systemKey      String?     @map("system_key")
+  isArchived     Boolean     @default(false) @map("is_archived")
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lines        JournalLine[]
+
+  @@unique([organizationId, systemKey])
+  @@unique([organizationId, code])
+  @@index([organizationId, type])
+  @@map("accounts")
+}
+
+// ---------------------------------------------------------------------------
+// Product-brand dimension
+// ---------------------------------------------------------------------------
+
+enum SalesChannelKind {
+  SHOPIFY
+  TIKTOK_SHOP
+  INSTAGRAM
+  ETSY
+  AMAZON
+  WEBSITE
+  OTHER
+}
+
+model SalesChannel {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  kind           SalesChannelKind
+  name           String
+  /// Fee model the payout matcher uses, e.g. { "percent": 2.9, "fixedMinor": 30 }. Optional until Slice 2.
+  feeModel       Json?            @map("fee_model")
+  isArchived     Boolean          @default(false) @map("is_archived")
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lines        JournalLine[]
+  payouts      Payout[]
+
+  @@unique([organizationId, name])
+  @@map("sales_channels")
+}
+
+// ---------------------------------------------------------------------------
+// The ledger
+// ---------------------------------------------------------------------------
+
+enum EntryStatus {
+  DRAFT
+  POSTED
+  REVERSED
+  DISCARDED
+}
+
+enum EntrySource {
+  MANUAL
+  BANK
+  INVOICE
+  BILL
+  PAYOUT
+  ORDER
+  PAYROLL
+  OPENING
+  MIGRATION
+}
+
+model JournalEntry {
+  id              String      @id @default(uuid()) @db.Uuid
+  organizationId  String      @map("organization_id") @db.Uuid
+  /// Calendar date in the organization's timezone.
+  date            DateTime    @db.Date
+  memo            String      @default("")
+  status          EntryStatus @default(POSTED)
+  /// Locked = reconciled or period closed. Immutable; corrections are reversing entries (ADR 0004).
+  locked          Boolean     @default(false)
+  source          EntrySource
+  /// Idempotency key from the source system: bank transaction id, Mongo _id, invoice id...
+  externalRef     String?     @map("external_ref")
+  /// Set on the reversing entry: the entry it reverses.
+  reversesEntryId String?     @unique @map("reverses_entry_id") @db.Uuid
+  /// Optimistic concurrency for in-place edits (two tabs recategorizing the same row).
+  version         Int         @default(1)
+  createdById     String?     @map("created_by_id") @db.Uuid
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lines        JournalLine[]
+  reverses     JournalEntry? @relation("Reversal", fields: [reversesEntryId], references: [id])
+  reversedBy   JournalEntry? @relation("Reversal")
+
+  @@unique([organizationId, source, externalRef])
+  @@index([organizationId, date(sort: Desc), id])
+  @@index([organizationId, status])
+  @@map("journal_entries")
+}
+
+model JournalLine {
+  id             String  @id @default(uuid()) @db.Uuid
+  entryId        String  @map("entry_id") @db.Uuid
+  /// Denormalized for org-scoped reporting queries and the balance trigger.
+  organizationId String  @map("organization_id") @db.Uuid
+  accountId      String  @map("account_id") @db.Uuid
+  /// Exactly one of debit/credit is positive (DB CHECK). Sign lives in the side, not the number.
+  debitMinor     BigInt  @default(0) @map("debit_minor")
+  creditMinor    BigInt  @default(0) @map("credit_minor")
+  currency       String  @db.Char(3)
+  /// Sales-channel dimension for revenue, fees, ad spend, COGS, refunds.
+  channelId      String? @map("channel_id") @db.Uuid
+  /// The line that mirrors a bank/processor row. Never edited after import; recategorization touches the other side.
+  isBankSide     Boolean @default(false) @map("is_bank_side")
+  memo           String?
+  position       Int     @default(0)
+
+  entry        JournalEntry  @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account      Account       @relation(fields: [accountId], references: [id])
+  channel      SalesChannel? @relation(fields: [channelId], references: [id])
+
+  @@index([entryId])
+  @@index([organizationId, accountId])
+  @@index([organizationId, channelId])
+  @@map("journal_lines")
+}
+
+// ---------------------------------------------------------------------------
+// Payouts (model now; matching in Slice 2)
+// ---------------------------------------------------------------------------
+
+enum PayoutStatus {
+  PENDING
+  MATCHED
+  UNMATCHED
+  VARIANCE
+}
+
+model Payout {
+  id               String       @id @default(uuid()) @db.Uuid
+  organizationId   String       @map("organization_id") @db.Uuid
+  channelId        String?      @map("channel_id") @db.Uuid
+  /// "stripe", "shopify_payments", "paypal", "square", ...
+  processor        String
+  externalId       String       @map("external_id")
+  grossMinor       BigInt       @map("gross_minor")
+  feesMinor        BigInt       @map("fees_minor")
+  refundsMinor     BigInt       @default(0) @map("refunds_minor")
+  adjustmentsMinor BigInt       @default(0) @map("adjustments_minor")
+  /// gross - fees - refunds + adjustments: the deposit the bank should show.
+  expectedNetMinor BigInt       @map("expected_net_minor")
+  currency         String       @db.Char(3)
+  arrivalDate      DateTime     @map("arrival_date") @db.Date
+  status           PayoutStatus @default(PENDING)
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  channel      SalesChannel? @relation(fields: [channelId], references: [id])
+
+  @@unique([organizationId, processor, externalId])
+  @@index([organizationId, status, arrivalDate])
+  @@map("payouts")
+}
+
+// ---------------------------------------------------------------------------
+// Audit
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id             BigInt   @id @default(autoincrement())
+  organizationId String   @map("organization_id") @db.Uuid
+  actorUserId    String?  @map("actor_user_id") @db.Uuid
+  /// "entry.post", "entry.reverse", "entry.recategorize", "entry.lock", "account.create", ...
+  action         String
+  entityType     String   @map("entity_type")
+  entityId       String   @map("entity_id")
+  before         Json?
+  after          Json?
+  requestId      String?  @map("request_id")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor        User?        @relation(fields: [actorUserId], references: [id])
+
+  @@index([organizationId, entityType, entityId])
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@map("audit_logs")
+}

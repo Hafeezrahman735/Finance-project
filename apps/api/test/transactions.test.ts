@@ -1,3 +1,4 @@
+import type { Response as SuperAgentResponse } from "superagent";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 import { auth, makeApp, signup } from "./helpers.js";
@@ -27,7 +28,7 @@ const kinds = [
   },
 ] as const;
 
-const collect = (r: NodeJS.ReadableStream, cb: (err: Error | null, body: Buffer) => void) => {
+const collect = (r: SuperAgentResponse, cb: (err: Error | null, body: Buffer) => void) => {
   const chunks: Buffer[] = [];
   r.on("data", (c: Buffer) => chunks.push(c));
   r.on("end", () => cb(null, Buffer.concat(chunks)));

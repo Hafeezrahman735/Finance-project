@@ -2,7 +2,7 @@
 
 Two views: what runs today, and the target the roadmap builds toward. Decisions behind the target are recorded in `docs/adr/`.
 
-## Today (Slice 1, PR b)
+## Today (Slice 1, PR c)
 
 ```
   apps/web (React 19 + Vite)                      apps/api (Express 5, TypeScript, ESM)
@@ -13,9 +13,15 @@ Two views: what runs today, and the target the roadmap builds toward. Decisions 
   │ utils/axiosinstance (token,│                │   ─▶ notFoundHandler ─▶ errorHandler (envelope) │   │ in tests)│
   │        401 → /login)       │                │ config.ts (zod, tiered) · lib/{logger,errors,excel}│ └──────────┘
   └────────────────────────────┘                │ models: User (+DTO), Income, Expense             │
-  packages/shared: scaffold only                └────────────────────────────────────────────────┘
-  test/: Vitest + Supertest against mongodb-memory-server (22 tests)
+  packages/shared: money (minor units) + dates  └────────────────────────────────────────────────┘
+                                                  services/ledger (post · reverse · recategorize ·   ┌──────────┐
+                                                    lock · trial balance) ─▶ Prisma 7 ─▶            │ Postgres │
+                                                  prisma/schema.prisma + migration with triggers    │ (ledger) │
+                                                  fixtures/demoOrg · scripts/migrate-mongo-to-pg    └──────────┘
+  test/: 43 API tests (Supertest on in-memory Mongo; ledger + property tests on TEST_DATABASE_URL) + 25 shared tests
 ```
+
+The two databases coexist until PR (d): the legacy routes still read and write Mongo; the ledger, organizations, and audit log are in Postgres. `docs/ledger.md` explains the ledger rules.
 
 Fixed in the port: owner filter on every update/delete; user DTOs (no password hash in any response); `timestamps` typo; Excel export streamed to the response with a formula-injection guard; API base URL from `VITE_API_URL` (empty by default, Vite proxies `/api`); the income delete route the web app calls but the old API never served. Still pending for the Prisma PR: float amounts (ADR 0002), wall-clock date windows, and the route naming conventions below.
 
@@ -76,8 +82,8 @@ Slice 1 lands in four revertible PRs, then feature lanes:
 | PR / lane | Contents |
 |---|---|
 | (a) done | Workspaces, docs, ADRs, no behavior change |
-| (b) this PR | TypeScript port of `apps/api`, still on Mongo; lint clean; Vitest + Supertest; GitHub Actions CI |
-| (c) | Prisma schema, ledger service, Mongo → Postgres migration script with dry run |
+| (b) done | TypeScript port of `apps/api`, still on Mongo; lint clean; Vitest + Supertest; GitHub Actions CI |
+| (c) this PR | Prisma 7 schema + migration with DB-enforced ledger invariants, ledger service, shared money/date helpers, demo organization seed, Mongo → Postgres migration script with dry run and verification |
 | (d) | Cut over to Postgres; remove Mongoose |
 | then | auth + organizations · Transactions UI · CSV import · Plaid sandbox · metrics + Overview · weekly brief |
 

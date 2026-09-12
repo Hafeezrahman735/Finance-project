@@ -23,3 +23,8 @@ apps/api/dist/
 !.vscode/extensions.json
 .idea
 .DS_Store
+
+# Prisma generated client (rebuilt by `prisma generate`)
+apps/api/src/generated/
+packages/shared/dist-types/
+*.tsbuildinfo

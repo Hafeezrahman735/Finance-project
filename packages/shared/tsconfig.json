@@ -6,26 +6,19 @@
     "lib": [
       "ES2022"
     ],
-    "types": [
-      "node"
-    ],
-    "rootDir": "src",
-    "outDir": "dist",
     "strict": true,
     "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "sourceMap": true,
-    "resolveJsonModule": true,
-    "composite": true
+    "allowImportingTsExtensions": false,
+    "composite": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "dist-types",
+    "rootDir": "."
   },
   "include": [
-    "src"
-  ],
-  "references": [
-    {
-      "path": "../../packages/shared"
-    }
+    "src",
+    "test"
   ]
 }
