@@ -35,7 +35,7 @@ export interface RuleView {
   createdAt: string;
 }
 
-type RuleRow = { id: string; pattern: string; match: RuleMatch; accountId: string; channelId: string | null; priority: number };
+export type RuleRow = { id: string; pattern: string; match: RuleMatch; accountId: string; channelId: string | null; priority: number };
 
 /** Pure matcher shared by import and apply-to-existing. */
 export function matchRule(description: string, rules: RuleRow[]): RuleRow | null {

@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { REFRESH_COOKIE, routeTable } from "../src/routes.js";
 import { OffBriefModel } from "../src/services/ai/model.js";
+import { FixtureProvider } from "../src/services/banking/feedProvider.js";
+import { createSecrets } from "../src/lib/secrets.js";
 import { CapturingEmailSink } from "../src/services/email/email.js";
 import { auth, signup, testConfig } from "./helpers.js";
 import { describePg, usePg } from "./pg.js";
@@ -176,7 +178,7 @@ run("sessions and account recovery", () => {
   });
 
   it("the route table still declares every auth route (matrix coverage)", () => {
-    const paths = routeTable(db(), testConfig, { email, briefModel: new OffBriefModel() }).map((r) => `${r.method} ${r.path}`);
+    const paths = routeTable(db(), testConfig, { email, briefModel: new OffBriefModel(), feedProvider: new FixtureProvider(), secrets: createSecrets(testConfig) }).map((r) => `${r.method} ${r.path}`);
     for (const p of ["post /auth/refresh", "post /auth/logout", "post /auth/logout-all", "post /auth/forgot-password", "post /auth/reset-password", "post /auth/verify-email", "post /auth/resend-verification"]) {
       expect(paths).toContain(p);
     }

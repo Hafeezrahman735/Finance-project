@@ -5,6 +5,9 @@ import type { Config } from "../src/config.js";
 import type { Db } from "../src/db/prisma.js";
 import type { RouteDeps } from "../src/routes.js";
 import { CapturingEmailSink } from "../src/services/email/email.js";
+import { OffBriefModel } from "../src/services/ai/model.js";
+import { FixtureProvider } from "../src/services/banking/feedProvider.js";
+import { createSecrets } from "../src/lib/secrets.js";
 import { MembershipRole } from "../src/generated/prisma/enums.js";
 
 export const testConfig: Config = {
@@ -23,13 +26,18 @@ export const testConfig: Config = {
   BRIEF_RECORD: false,
   AUTH_RATE_LIMIT: false, // the rate-limit test switches it on explicitly
   TRUST_PROXY: undefined,
+  PLAID_CLIENT_ID: undefined,
+  PLAID_SECRET: undefined,
+  PLAID_ENV: "fixture",
+  TOKEN_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  TOKEN_ENCRYPTION_KEY_PREVIOUS: undefined,
   PORT: 0,
   CLIENT_URL: undefined,
   LOG_LEVEL: "silent",
 };
 
 export function makeApp(db: Db, config: Partial<Config> = {}, deps: Partial<RouteDeps> = {}) {
-  return createApp(db, { ...testConfig, ...config }, pino({ level: "silent" }), { email: new CapturingEmailSink(), ...deps });
+  return createApp(db, { ...testConfig, ...config }, pino({ level: "silent" }), { email: new CapturingEmailSink(), briefModel: new OffBriefModel(), feedProvider: new FixtureProvider(), secrets: createSecrets(testConfig), ...deps });
 }
 
 export interface Session {

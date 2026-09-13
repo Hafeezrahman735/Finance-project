@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { Link, useNavigate } from "react-router-dom";
+import BankConnections from "../components/banking/BankConnections";
 import AppShell from "../components/layout/AppShell";
 import Button from "../components/ui/Button";
 import Field from "../components/ui/Field";
@@ -136,6 +137,17 @@ export default function Import() {
         <p role="alert" className="mb-4 rounded-ui border border-negative/40 bg-surface px-3 py-2 text-negative">
           {error}
         </p>
+      )}
+
+      {step === 0 && (
+        <section className="mb-8 max-w-xl" aria-labelledby="feeds">
+          <h2 id="feeds" className="font-sans text-base font-semibold">
+            Or let the bank send transactions
+          </h2>
+          <div className="mt-2">
+            <BankConnections compact onChange={() => bankApi.list().then(setAccounts).catch(() => {})} />
+          </div>
+        </section>
       )}
 
       {step === 0 && (

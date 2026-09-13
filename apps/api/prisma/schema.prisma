@@ -68,6 +68,8 @@ model Organization {
   payouts       Payout[]
   auditLogs     AuditLog[]
   bankAccounts  BankAccount[]
+  bankConnections  BankConnection[]
+  bankTransactions BankTransaction[]
   imports       Import[]
   rules         CategoryRule[]
   metricsSnapshots MetricsSnapshot[]
@@ -407,16 +409,102 @@ model BankAccount {
   currency       String          @db.Char(3)
   /// Last four digits or similar, display only.
   mask           String?
+  /// Set when the account comes from a feed (plan 1.4b): the connection and the provider's account id.
+  connectionId   String?         @map("connection_id") @db.Uuid
+  externalId     String?         @map("external_id")
   isArchived     Boolean         @default(false) @map("is_archived")
   createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  account      Account      @relation(fields: [accountId], references: [id])
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account      Account         @relation(fields: [accountId], references: [id])
+  connection   BankConnection? @relation(fields: [connectionId], references: [id])
   imports      Import[]
+  transactions BankTransaction[]
 
   @@unique([organizationId, name])
+  @@unique([connectionId, externalId])
   @@map("bank_accounts")
+}
+
+// ---------------------------------------------------------------------------
+// Bank feeds (plan 1.4b: Plaid sandbox; eng review F2, F17)
+// ---------------------------------------------------------------------------
+
+enum BankConnectionStatus {
+  ACTIVE
+  /// The bank wants the user to log in again (ITEM_LOGIN_REQUIRED); shown as a "Reconnect" banner.
+  NEEDS_REAUTH
+  DISCONNECTED
+}
+
+/// One connected institution (a Plaid Item). The access token is AES-256-GCM
+/// encrypted with the key named by `keyId`; rows re-encrypt lazily on read
+/// after a key rotation (eng review F17).
+model BankConnection {
+  id                    String               @id @default(uuid()) @db.Uuid
+  organizationId        String               @map("organization_id") @db.Uuid
+  /// "plaid" or "fixture" (the offline provider used in development and tests).
+  provider              String
+  providerItemId        String               @map("provider_item_id")
+  institutionId         String?              @map("institution_id")
+  institutionName       String               @map("institution_name")
+  accessTokenCiphertext String               @map("access_token_ciphertext")
+  keyId                 String               @map("key_id")
+  status                BankConnectionStatus @default(ACTIVE)
+  /// /transactions/sync cursor, persisted only after the page it came with is committed.
+  syncCursor            String?              @map("sync_cursor")
+  lastSyncedAt          DateTime?            @map("last_synced_at") @db.Timestamptz(3)
+  lastError             String?              @map("last_error")
+  createdAt             DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  accounts     BankAccount[]
+  transactions BankTransaction[]
+
+  @@unique([provider, providerItemId])
+  @@index([organizationId])
+  @@map("bank_connections")
+}
+
+enum BankTransactionStatus {
+  ACTIVE
+  /// The provider removed it (or a pending transaction posted under a new id); its entry is reversed.
+  REMOVED
+}
+
+/// A raw feed row and the journal entry it produced. Idempotent by the
+/// provider's transaction id; `modified` rows are reversed and re-posted.
+model BankTransaction {
+  id                String                @id @default(uuid()) @db.Uuid
+  organizationId    String                @map("organization_id") @db.Uuid
+  connectionId      String                @map("connection_id") @db.Uuid
+  bankAccountId     String                @map("bank_account_id") @db.Uuid
+  externalId        String                @map("external_id")
+  /// The pending transaction this posted one replaces (Plaid `pending_transaction_id`).
+  pendingExternalId String?               @map("pending_external_id")
+  date              DateTime              @db.Date
+  /// Signed: positive = money in, negative = money out (the bank's perspective).
+  amountMinor       BigInt                @map("amount_minor")
+  description       String
+  pending           Boolean               @default(false)
+  status            BankTransactionStatus @default(ACTIVE)
+  /// The live journal entry for this row (null after removal).
+  entryId           String?               @unique @map("entry_id") @db.Uuid
+  /// Bumped on every re-post (modified rows); part of the entry's externalRef so history stays unique.
+  revision          Int                   @default(0)
+  raw               Json
+  createdAt         DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connection   BankConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  bankAccount  BankAccount    @relation(fields: [bankAccountId], references: [id])
+
+  @@unique([connectionId, externalId])
+  @@index([organizationId, bankAccountId, date])
+  @@map("bank_transactions")
 }
 
 enum ImportStatus {

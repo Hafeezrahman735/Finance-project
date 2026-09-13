@@ -59,6 +59,10 @@ cp apps/api/.env.example apps/api/.env
 | `AI_PROVIDER` | no | `anthropic` if a key is set, else `off` | `anthropic` \| `recorded` (replay cassettes from `BRIEF_CASSETTE_DIR`, for CI) \| `off`. |
 | `AI_MODEL` | no | `claude-opus-5` | Model id for the brief. |
 | `BRIEF_RECORD` | no | `false` | With `anthropic`, also save each response as a cassette so `recorded` runs can replay it. |
+| `PLAID_CLIENT_ID`, `PLAID_SECRET` | no | none | Bank feeds through [Plaid](https://dashboard.plaid.com) (sandbox is free, no card). **Without them "Connect a bank" uses the built-in fixture bank**: offline, deterministic, two accounts, 60 days of rows, and a second sync that posts a pending row and edits one amount. |
+| `PLAID_ENV` | no | `sandbox` with keys, else `fixture` | `sandbox` \| `production` \| `fixture`. Production needs Plaid's approval (TODOS.md). |
+| `TOKEN_ENCRYPTION_KEY` | in production with Plaid | derived from `JWT_SECRET` | 64 hex chars (`openssl rand -hex 32`); bank access tokens are AES-256-GCM sealed with it. See [Bank feeds](#bank-feeds). |
+| `TOKEN_ENCRYPTION_KEY_PREVIOUS` | no | none | Comma-separated old keys during a rotation. |
 | `AUTH_RATE_LIMIT` | no | `true` | Per-IP / per-email limits on `/auth/*` (see [Rate limits](#rate-limits)). Only tests turn it off. |
 | `EMAIL_FROM` | no | `LedgerIQ <onboarding@resend.dev>` | Sender. Resend's `onboarding@resend.dev` only delivers to your own account email; verify a domain for real users. |
 
@@ -114,6 +118,12 @@ Transactions → Import (or the Overview's first action). Add the bank account o
 ## What changes next
 
 Done in Slice 1: the Transactions page, CSV import, sessions and recovery, the Overview metrics, and the weekly brief (`docs/ai-brief.md`), each with its vendor key optional. Remaining: Plaid sandbox (1.4b).
+
+### Bank feeds
+
+Import → "Connect a bank (beta)" (or Settings → Connected banks). With Plaid keys, Link opens; in the sandbox any bank accepts `user_good` / `pass_good`. Without keys the fixture bank connects immediately. Every connected account becomes a bank account with its own ledger account, exactly like a CSV import, and "Sync now" pulls new, changed, and removed rows: changed rows are reversed and re-posted with the category kept; removed rows are reversed; a pending row that posts under a new id inherits the category you gave the pending one. Rules apply on the way in. Webhooks are not wired yet (TODOS.md); use "Sync now" or run a periodic sync.
+
+**Access tokens at rest.** Each connection's Plaid access token is stored AES-256-GCM encrypted under `TOKEN_ENCRYPTION_KEY`, tagged with the key's id. To rotate: set the new key as `TOKEN_ENCRYPTION_KEY`, move the old one to `TOKEN_ENCRYPTION_KEY_PREVIOUS`, deploy; rows re-encrypt the next time they are read (every sync). Drop the previous key once `SELECT count(*) FROM bank_connections WHERE key_id <> '<current id>'` is zero. Without any key, development derives one from `JWT_SECRET` and logs a warning; production with Plaid refuses to boot without a real key.
 
 ### Rate limits
 

@@ -4,6 +4,8 @@ import { MembershipRole } from "../src/generated/prisma/enums.js";
 import { routeTable } from "../src/routes.js";
 import { roleAtLeast } from "../src/middleware/auth.js";
 import { OffBriefModel } from "../src/services/ai/model.js";
+import { FixtureProvider } from "../src/services/banking/feedProvider.js";
+import { createSecrets } from "../src/lib/secrets.js";
 import { CapturingEmailSink } from "../src/services/email/email.js";
 import { auth, invite, makeApp, signup, testConfig, type Session } from "./helpers.js";
 import { describePg, usePg } from "./pg.js";
@@ -27,7 +29,7 @@ run("authz matrix", () => {
 
   it("covers every route for every role", async () => {
     const app = makeApp(db());
-    const routes = routeTable(db(), testConfig, { email: new CapturingEmailSink(), briefModel: new OffBriefModel() });
+    const routes = routeTable(db(), testConfig, { email: new CapturingEmailSink(), briefModel: new OffBriefModel(), feedProvider: new FixtureProvider(), secrets: createSecrets(testConfig) });
     expect(routes.length).toBeGreaterThan(10);
 
     const owner = await signup(app);

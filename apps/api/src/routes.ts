@@ -15,6 +15,9 @@ import { authService, forgotPasswordSchema, loginSchema, registerSchema, resetPa
 import type { EmailSink } from "./services/email/email.js";
 import { bankAccountsService, createBankAccountSchema } from "./services/banking/bankAccounts.js";
 import { importsService, MAX_FILE_BYTES } from "./services/banking/imports.js";
+import { connectSchema, feedsService } from "./services/banking/feeds.js";
+import type { FeedProvider } from "./services/banking/feedProvider.js";
+import type { Secrets } from "./lib/secrets.js";
 import { createRuleSchema, rulesService } from "./services/rules/rules.js";
 import { dashboardService } from "./services/dashboard/dashboard.js";
 import { metricsService } from "./services/metrics/metrics.js";
@@ -54,6 +57,9 @@ export interface RouteDeps {
   email: EmailSink;
   /** The brief's model seam (anthropic | recorded | off). */
   briefModel: BriefModel;
+  /** Bank feeds (plaid | fixture) and the key ring for access tokens at rest. */
+  feedProvider: FeedProvider;
+  secrets: Secrets;
   logger?: Logger;
 }
 
@@ -79,6 +85,7 @@ export function routeTable(db: Db, config: Config, deps: RouteDeps): RouteDef[] 
     return { ...req.org!, featureFlags: row?.featureFlags };
   };
   const banks = bankAccountsService(db);
+  const feeds = feedsService(db, { provider: deps.feedProvider, secrets: deps.secrets, logger: deps.logger });
   const imports = importsService(db);
   const rules = rulesService(db);
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_FILE_BYTES, files: 1 } });
@@ -267,6 +274,31 @@ export function routeTable(db: Db, config: Config, deps: RouteDeps): RouteDef[] 
     { method: "post", path: "/transactions/:id/reverse", access: MembershipRole.BOOKKEEPER, example: FOREIGN, handler: async (req, res) => res.json(await txns.reverse(req.org!.id, param(req, "id"), actor(req))) },
     // DELETE is an alias for reverse: posted entries never disappear (ADR 0004).
     { method: "delete", path: "/transactions/:id", access: MembershipRole.BOOKKEEPER, example: FOREIGN, handler: async (req, res) => res.json({ message: "Transaction reversed", ...(await txns.reverse(req.org!.id, param(req, "id"), actor(req))) }) },
+
+    // --- bank feeds (plan 1.4b) ---------------------------------------------
+    { method: "get", path: "/bank-connections/provider", access: MembershipRole.VIEWER, handler: async (_req, res) => res.json(feeds.provider) },
+    { method: "get", path: "/bank-connections", access: MembershipRole.VIEWER, handler: async (req, res) => res.json({ data: await feeds.list(req.org!.id) }) },
+    { method: "post", path: "/bank-connections/link-token", access: MembershipRole.BOOKKEEPER, handler: async (req, res) => res.json(await feeds.linkToken(req.org!.id, req.user!.id)) },
+    {
+      method: "post",
+      path: "/bank-connections",
+      access: MembershipRole.BOOKKEEPER,
+      handler: chain(validateBody(connectSchema), async (req, res) => res.status(201).json(await feeds.connect(req.org!.id, req.org!.currency, body<typeof connectSchema>(req), actor(req)))),
+    },
+    { method: "get", path: "/bank-connections/:id", access: MembershipRole.VIEWER, example: FOREIGN, handler: async (req, res) => res.json(await feeds.get(req.org!.id, req.params.id as string)) },
+    { method: "post", path: "/bank-connections/:id/link-token", access: MembershipRole.BOOKKEEPER, example: FOREIGN, handler: async (req, res) => res.json(await feeds.linkToken(req.org!.id, req.user!.id, req.params.id as string)) },
+    { method: "post", path: "/bank-connections/:id/sync", access: MembershipRole.BOOKKEEPER, example: FOREIGN, handler: async (req, res) => res.json(await feeds.sync(req.org!.id, req.params.id as string, actor(req))) },
+    { method: "post", path: "/bank-connections/:id/reconnected", access: MembershipRole.BOOKKEEPER, example: FOREIGN, handler: async (req, res) => res.json(await feeds.reconnected(req.org!.id, req.params.id as string, actor(req))) },
+    {
+      method: "delete",
+      path: "/bank-connections/:id",
+      access: MembershipRole.ADMIN,
+      example: FOREIGN,
+      handler: async (req, res) => {
+        await feeds.disconnect(req.org!.id, req.params.id as string, actor(req));
+        res.json({ message: "Bank disconnected; its transactions stay in your books" });
+      },
+    },
 
     // --- bank accounts ----------------------------------------------------
     { method: "get", path: "/bank-accounts", access: MembershipRole.VIEWER, handler: async (req, res) => res.json({ data: await banks.list(req.org!.id) }) },

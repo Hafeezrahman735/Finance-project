@@ -88,7 +88,8 @@ Plan: `~/.claude/plans/make-a-plan-to-witty-torvalds.md`. CEO plan: `~/.gstack/p
 - **Effort:** S. **Depends on:** Slice 1 shell.
 
 ### Slice 1 follow-ups
-- Plaid webhook receiver with local tunnel (`/sandbox/item/fire_webhook`); Slice 1 uses "Sync now" polling.
+- Plaid webhook receiver (`/webhooks/plaid` on `express.raw()`, signature verified, enqueue a sync by item id) with a local tunnel for `/sandbox/item/fire_webhook`; Slice 1 uses "Sync now". Until then, run `POST /bank-connections/:id/sync` on a schedule (the pg-boss worker item below).
+- Shared rate-limit store and a shared sync lock: the per-connection "Sync now" lock is in-process today.
 - Email verification, password reset (lane 1.1) and the emailed brief (lane E8, `npm run brief:weekly`) have landed.
 - Gate outbound sends (invoices, Slice 2) on `emailVerifiedAt`; the flag is exposed on `/auth/me` today.
 

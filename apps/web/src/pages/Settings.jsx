@@ -1,6 +1,7 @@
 import React, { useContext, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { Link } from "react-router-dom";
+import BankConnections from "../components/banking/BankConnections";
 import AppShell from "../components/layout/AppShell";
 import Button from "../components/ui/Button";
 import { UserContext } from "../context/userContext";
@@ -91,6 +92,15 @@ export default function Settings() {
           <span className="text-base">{features === null ? "…" : features.moneyBrief ? "On" : "Off"}</span>
           {organization?.role === "OWNER" && features !== null && <Button onClick={toggleBrief}>{features.moneyBrief ? "Switch off" : "Switch on"}</Button>}
           {organization?.role !== "OWNER" && <span className="text-sm text-muted">Only the owner can change this.</span>}
+        </div>
+      </section>
+
+      <section aria-labelledby="feeds" className="mt-10">
+        <h2 id="feeds" className="font-sans text-base font-semibold">
+          Connected banks
+        </h2>
+        <div className="mt-2">
+          <BankConnections onChange={load} />
         </div>
       </section>
 

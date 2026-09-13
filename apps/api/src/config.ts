@@ -34,6 +34,14 @@ const schema = z.object({
   BRIEF_CASSETTE_DIR: z.string().default("fixtures/cassettes/brief"),
   /** With AI_PROVIDER=anthropic, also write each live response into BRIEF_CASSETTE_DIR for later recorded runs. */
   BRIEF_RECORD: envBool(false),
+  /** Bank feeds (plan 1.4b). With client id + secret the provider is Plaid (PLAID_ENV); without them the offline fixture bank. */
+  PLAID_CLIENT_ID: z.string().min(1).optional(),
+  PLAID_SECRET: z.string().min(1).optional(),
+  PLAID_ENV: z.enum(["sandbox", "production", "fixture"]).optional(),
+  /** 32-byte key (64 hex chars) for access tokens at rest. Required with Plaid in production; derived from JWT_SECRET otherwise (with a warning). */
+  TOKEN_ENCRYPTION_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/, "must be 64 hex characters (openssl rand -hex 32)").optional(),
+  /** Comma-separated previous keys, kept until every row has re-encrypted under the current one. */
+  TOKEN_ENCRYPTION_KEY_PREVIOUS: z.string().optional(),
   /** Per-IP/per-email limits on /auth/* (pre-tester prerequisite). Off only for tests. */
   AUTH_RATE_LIMIT: envBool(true),
   /** Express "trust proxy" setting when behind a load balancer ("1", "true", or a CIDR list) so req.ip is the client. */
@@ -45,6 +53,15 @@ const schema = z.object({
 
 export type Config = z.infer<typeof schema>;
 
+/** Cross-field rules that zod's object schema cannot express in one place. */
+function refine(c: Config): string[] {
+  const problems: string[] = [];
+  if ((c.PLAID_CLIENT_ID && !c.PLAID_SECRET) || (!c.PLAID_CLIENT_ID && c.PLAID_SECRET)) problems.push("PLAID_CLIENT_ID and PLAID_SECRET must be set together (docs/setup.md#bank-feeds)");
+  if (c.PLAID_ENV === "production" && !(c.PLAID_CLIENT_ID && c.PLAID_SECRET)) problems.push("PLAID_ENV=production needs PLAID_CLIENT_ID and PLAID_SECRET");
+  if (c.NODE_ENV === "production" && c.PLAID_CLIENT_ID && !c.TOKEN_ENCRYPTION_KEY) problems.push("TOKEN_ENCRYPTION_KEY is required to store bank access tokens in production (openssl rand -hex 32)");
+  return problems;
+}
+
 const docsFor: Record<string, string> = {
   DATABASE_URL: "docs/setup.md#4-configure-the-api",
   JWT_SECRET: "docs/setup.md#4-configure-the-api",
@@ -52,7 +69,11 @@ const docsFor: Record<string, string> = {
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const result = schema.safeParse(env);
-  if (result.success) return result.data;
+  if (result.success) {
+    const problems = refine(result.data);
+    if (problems.length) throw new Error(problems.map((p) => `Config error: ${p}.`).join("\n"));
+    return result.data;
+  }
 
   const lines = result.error.issues.map((issue) => {
     const name = String(issue.path[0] ?? "config");

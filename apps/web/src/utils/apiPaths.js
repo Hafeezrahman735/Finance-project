@@ -37,6 +37,15 @@ export const API_PATHS = {
     ONE: (id) => `/api/v1/briefs/${id}`,
   },
   BANK_ACCOUNTS: { LIST: "/api/v1/bank-accounts" },
+  BANK_CONNECTIONS: {
+    PROVIDER: "/api/v1/bank-connections/provider",
+    LIST: "/api/v1/bank-connections",
+    LINK_TOKEN: "/api/v1/bank-connections/link-token",
+    ONE: (id) => `/api/v1/bank-connections/${id}`,
+    ONE_LINK_TOKEN: (id) => `/api/v1/bank-connections/${id}/link-token`,
+    SYNC: (id) => `/api/v1/bank-connections/${id}/sync`,
+    RECONNECTED: (id) => `/api/v1/bank-connections/${id}/reconnected`,
+  },
   IMPORTS: {
     LIST: "/api/v1/imports",
     ONE: (id) => `/api/v1/imports/${id}`,

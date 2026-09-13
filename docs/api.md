@@ -43,6 +43,15 @@ Source of truth: the route table in `apps/api/src/routes.ts`. Every route there 
 | PATCH | `/transactions/:id` | BOOKKEEPER | `version` + either `lines: [{ accountId, amountMinor, channelId? }]` (recategorize/split, any source) or `amountMinor/date/memo/direction` (manual entries only; returns a **new** id) | `Transaction` |
 | POST | `/transactions/:id/reverse` | BOOKKEEPER | — | `{ original, reversal }` |
 | DELETE | `/transactions/:id` | BOOKKEEPER | — | alias for reverse; `{ message, original, reversal }` |
+| GET | `/bank-connections/provider` | VIEWER | — | `{ name: plaid|fixture, env }` |
+| GET | `/bank-connections` | VIEWER | — | `{ data: [ { id, provider, institutionName, status: ACTIVE|NEEDS_REAUTH, lastSyncedAt, lastError, accounts[], transactionCount } ] }` (disconnected ones omitted) |
+| POST | `/bank-connections/link-token` | BOOKKEEPER | — | `{ linkToken, provider, env, updateMode: false }` for Plaid Link; the fixture provider returns a constant |
+| POST | `/bank-connections` | BOOKKEEPER | `publicToken, institutionName?, institutionId?` | `201 { connection, sync }`; exchanges the token, seals it, creates one bank account (with ledger account) per feed account, runs the first sync. Fixture: `publicToken: "fixture-public-token"` |
+| GET | `/bank-connections/:id` | VIEWER | — | one connection |
+| POST | `/bank-connections/:id/link-token` | BOOKKEEPER | — | Link token in update mode (re-authentication) |
+| POST | `/bank-connections/:id/sync` | BOOKKEEPER | — | `SyncResult { status, pages, added, modified, removed, skipped, restarts }`; concurrent calls share one run |
+| POST | `/bank-connections/:id/reconnected` | BOOKKEEPER | — | after Link update mode: status → ACTIVE, then sync |
+| DELETE | `/bank-connections/:id` | ADMIN | — | disconnect; posted entries and the bank accounts stay |
 | GET | `/bank-accounts` | VIEWER | — | `{ data: [ { id, name, kind, accountId, currency, mask } ] }` |
 | POST | `/bank-accounts` | BOOKKEEPER | `name, kind=CHECKING\|SAVINGS\|CREDIT_CARD\|CASH\|OTHER, mask?` | `201 BankAccount` (creates its ledger account, systemKey `bank:<id>`) |
 | GET | `/imports` | VIEWER | — | `{ data: Import[] }` (last 50) |
@@ -92,9 +101,11 @@ Source of truth: the route table in `apps/api/src/routes.ts`. Every route there 
 | `insufficient_role` | 403 | role below the route's minimum |
 | `brief_regeneration_limit` | 429 | this week's brief was regenerated 3 times already |
 | `rate_limited_login`, `rate_limited_register`, `rate_limited_refresh`, `rate_limited_forgot_password`, `rate_limited_reset_password`, `rate_limited_verify_email`, `rate_limited_resend_verification` | 429 | auth rate limits (`docs/setup.md#rate-limits`); `RateLimit-*` headers say when to retry |
-| `not_found`, `entry_not_found`, `organization_not_found`, `brief_not_found`, `brief_disabled`, `route_not_found` | 404 | includes foreign ids and malformed ids |
+| `not_found`, `entry_not_found`, `organization_not_found`, `brief_not_found`, `brief_disabled`, `bank_connection_not_found`, `route_not_found` | 404 | includes foreign ids and malformed ids |
 | `email_taken`, `bank_account_exists` | 409 | register / bank accounts |
 | `import_not_mapped`, `import_committed` | 409 | import step out of order |
+| `bank_connection_exists`, `bank_connection_disconnected` | 409 | the bank login belongs to another organization / the connection was disconnected |
+| `feed_item_login_required`, `feed_invalid_token`, `feed_rate_limit`, `feed_other` | 502 | the feed provider (Plaid) failed; `lastError` on the connection carries the detail |
 | `file_too_large`, `too_many_rows` | 400 | upload limits |
 | `stale_version` | 409 | the entry changed since you loaded it; reload and retry |
 | `entry_locked`, `invalid_transition` | 409 | reconciled/closed entry, or an operation the entry's state does not allow |

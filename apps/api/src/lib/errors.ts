@@ -9,7 +9,7 @@ import { ZodError } from "zod";
  * `message` is kept at the top level because the current web app reads
  * `error.response.data.message`; new client code switches on `error.code`.
  */
-export type ErrorType = "validation_error" | "authentication_error" | "permission_error" | "not_found" | "conflict" | "rate_limit_error" | "internal_error";
+export type ErrorType = "validation_error" | "authentication_error" | "permission_error" | "not_found" | "conflict" | "rate_limit_error" | "upstream_error" | "internal_error";
 
 export class AppError extends Error {
   constructor(
@@ -51,6 +51,13 @@ export class NotFoundError extends AppError {
 export class RateLimitError extends AppError {
   constructor(message: string, code = "rate_limited") {
     super(429, "rate_limit_error", code, message);
+  }
+}
+
+/** A vendor (Plaid, Resend, Anthropic) failed or refused; 502, never our fault to the client. */
+export class UpstreamError extends AppError {
+  constructor(message: string, code = "upstream_error") {
+    super(502, "upstream_error", code, message);
   }
 }
 

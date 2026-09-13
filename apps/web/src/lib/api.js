@@ -60,6 +60,17 @@ export const bankAccounts = {
   create: (body) => axiosInstance.post(API_PATHS.BANK_ACCOUNTS.LIST, body).then((r) => r.data),
 };
 
+/** Bank feeds (plan 1.4b): Plaid Link or the offline fixture bank; syncs can take a while on first connect. */
+export const bankConnections = {
+  provider: () => axiosInstance.get(API_PATHS.BANK_CONNECTIONS.PROVIDER).then((r) => r.data),
+  list: () => axiosInstance.get(API_PATHS.BANK_CONNECTIONS.LIST).then((r) => r.data.data),
+  linkToken: (connectionId) => axiosInstance.post(connectionId ? API_PATHS.BANK_CONNECTIONS.ONE_LINK_TOKEN(connectionId) : API_PATHS.BANK_CONNECTIONS.LINK_TOKEN).then((r) => r.data),
+  connect: (body) => axiosInstance.post(API_PATHS.BANK_CONNECTIONS.LIST, body, { timeout: 300000 }).then((r) => r.data),
+  sync: (id) => axiosInstance.post(API_PATHS.BANK_CONNECTIONS.SYNC(id), {}, { timeout: 300000 }).then((r) => r.data),
+  reconnected: (id) => axiosInstance.post(API_PATHS.BANK_CONNECTIONS.RECONNECTED(id), {}, { timeout: 300000 }).then((r) => r.data),
+  remove: (id) => axiosInstance.delete(API_PATHS.BANK_CONNECTIONS.ONE(id)).then((r) => r.data),
+};
+
 export const imports = {
   list: () => axiosInstance.get(API_PATHS.IMPORTS.LIST).then((r) => r.data.data),
   get: (id) => axiosInstance.get(API_PATHS.IMPORTS.ONE(id)).then((r) => r.data),
