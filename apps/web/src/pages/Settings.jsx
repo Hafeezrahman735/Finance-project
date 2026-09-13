@@ -5,7 +5,7 @@ import AppShell from "../components/layout/AppShell";
 import Button from "../components/ui/Button";
 import { UserContext } from "../context/userContext";
 import { useUserAuth } from "../hooks/useUserAuth";
-import { bankAccounts as bankApi, errorMessage, imports as importsApi, rules as rulesApi } from "../lib/api";
+import { bankAccounts as bankApi, errorMessage, features as featuresApi, imports as importsApi, rules as rulesApi } from "../lib/api";
 import { shortDate } from "../lib/format";
 
 /** Settings: organization, bank accounts, import history, categorization rules. */
@@ -15,20 +15,31 @@ export default function Settings() {
   const [banks, setBanks] = useState([]);
   const [rules, setRules] = useState([]);
   const [history, setHistory] = useState([]);
+  const [features, setFeatures] = useState(null);
   const [error, setError] = useState(null);
 
   const load = () =>
-    Promise.all([bankApi.list(), rulesApi.list(), importsApi.list()])
-      .then(([b, r, h]) => {
+    Promise.all([bankApi.list(), rulesApi.list(), importsApi.list(), featuresApi.get()])
+      .then(([b, r, h, f]) => {
         setBanks(b);
         setRules(r);
         setHistory(h);
+        setFeatures(f);
       })
       .catch((err) => setError(errorMessage(err)));
 
   useEffect(() => {
     load();
   }, []);
+
+  const toggleBrief = async () => {
+    try {
+      setFeatures(await featuresApi.update({ moneyBrief: !features?.moneyBrief }));
+      toast.success(features?.moneyBrief ? "Weekly brief switched off" : "Weekly brief switched on");
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
 
   const removeRule = async (rule) => {
     try {
@@ -65,6 +76,22 @@ export default function Settings() {
           <dt className="text-muted">Signed in as</dt>
           <dd>{user?.email}</dd>
         </dl>
+      </section>
+
+      <section aria-labelledby="brief-setting" className="mt-10">
+        <h2 id="brief-setting" className="font-sans text-base font-semibold">
+          Weekly brief
+        </h2>
+        <p className="mt-2 max-w-2xl text-muted">
+          Off until an owner switches it on. When on, each week's numbers (metric names and values, channel names, and the merchant names of recurring charges; never
+          transaction rows or customer details) are narrated by a Claude model when the server has an Anthropic key; without a key the brief is a plain summary computed
+          here.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <span className="text-base">{features === null ? "…" : features.moneyBrief ? "On" : "Off"}</span>
+          {organization?.role === "OWNER" && features !== null && <Button onClick={toggleBrief}>{features.moneyBrief ? "Switch off" : "Switch on"}</Button>}
+          {organization?.role !== "OWNER" && <span className="text-sm text-muted">Only the owner can change this.</span>}
+        </div>
       </section>
 
       <section aria-labelledby="banks" className="mt-10">

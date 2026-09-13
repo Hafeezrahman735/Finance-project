@@ -21,6 +21,8 @@ export const testConfig: Config = {
   AI_MODEL: "claude-opus-5",
   BRIEF_CASSETTE_DIR: "fixtures/cassettes/brief",
   BRIEF_RECORD: false,
+  AUTH_RATE_LIMIT: false, // the rate-limit test switches it on explicitly
+  TRUST_PROXY: undefined,
   PORT: 0,
   CLIENT_URL: undefined,
   LOG_LEVEL: "silent",

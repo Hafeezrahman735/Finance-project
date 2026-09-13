@@ -20,6 +20,7 @@ export const API_PATHS = {
   ORGANIZATIONS: {
     LIST: "/api/v1/organizations",
     CURRENT: "/api/v1/organizations/current",
+    FEATURES: "/api/v1/organizations/current/features",
   },
   ACCOUNTS: {
     LIST: "/api/v1/accounts",

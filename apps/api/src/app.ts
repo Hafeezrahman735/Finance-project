@@ -25,7 +25,8 @@ import { createBriefModel } from "./services/ai/model.js";
 export function createApp(db: Db, config: Config, logger: Logger, deps: Partial<RouteDeps> = {}): Express {
   const app = express();
   app.disable("x-powered-by");
-  app.set("trust proxy", 1);
+  // Only trust X-Forwarded-For when told to (TRUST_PROXY); trusting it blindly lets a direct client spoof its IP past the rate limits.
+  if (config.TRUST_PROXY) app.set("trust proxy", /^\d+$/.test(config.TRUST_PROXY) ? Number(config.TRUST_PROXY) : config.TRUST_PROXY === "true" ? true : config.TRUST_PROXY);
 
   app.use(requestLogger(logger));
   app.use(

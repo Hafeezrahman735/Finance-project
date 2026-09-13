@@ -4,9 +4,11 @@ import { z } from "zod";
 import type { Config } from "./config.js";
 import type { Db } from "./db/prisma.js";
 import { MembershipRole } from "./generated/prisma/enums.js";
+import type { Prisma } from "./generated/prisma/client.js";
 import { NotFoundError, ValidationError as ValidationErrorForRoute } from "./lib/errors.js";
 import { sendWorkbook } from "./lib/excel.js";
 import { protect, requireOrg } from "./middleware/auth.js";
+import { authRateLimits } from "./middleware/rateLimit.js";
 import { body, validateBody } from "./middleware/validate.js";
 import type { Logger } from "pino";
 import { authService, forgotPasswordSchema, loginSchema, registerSchema, resetPasswordSchema, toUserDTO, verifyEmailSchema, type AuthResult } from "./services/auth/auth.js";
@@ -45,6 +47,9 @@ export interface RouteDef {
 
 const actor = (req: Request) => ({ userId: req.user?.id ?? null, requestId: req.id });
 
+/** Per-organization feature flags an owner can change. */
+const featuresSchema = z.object({ moneyBrief: z.boolean() });
+
 export interface RouteDeps {
   email: EmailSink;
   /** The brief's model seam (anthropic | recorded | off). */
@@ -61,6 +66,9 @@ export function routeTable(db: Db, config: Config, deps: RouteDeps): RouteDef[] 
   const clearRefresh = (res: Response) => res.clearCookie(REFRESH_COOKIE, { path: "/api/v1/auth" });
   const readRefresh = (req: Request) => (req.cookies as Record<string, string> | undefined)?.[REFRESH_COOKIE];
   const withoutRefresh = ({ refreshToken: _r, ...rest }: AuthResult) => rest;
+  const limits = authRateLimits({ enabled: config.AUTH_RATE_LIMIT });
+  /** Rate-limit an auth handler by route name (no-op when limits are disabled). */
+  const limited = (name: string, handler: RequestHandler): RequestHandler => (limits[name] ? chain(limits[name], (req, res) => new Promise<void>((resolve, reject) => handler(req, res, (err?: unknown) => (err ? reject(err) : resolve())))) : handler);
   const txns = transactionsService(db);
   const dashboard = dashboardService(db);
   const metrics = metricsService(db);
@@ -84,36 +92,36 @@ export function routeTable(db: Db, config: Config, deps: RouteDeps): RouteDef[] 
       method: "post",
       path: "/auth/register",
       access: "public",
-      handler: chain(validateBody(registerSchema), async (req, res) => {
+      handler: limited("register", chain(validateBody(registerSchema), async (req, res) => {
         const r = await auth.register(body<typeof registerSchema>(req), req.get("user-agent"));
         setRefresh(res, r.refreshToken);
         res.status(201).json(withoutRefresh(r));
-      }),
+      })),
     },
     {
       method: "post",
       path: "/auth/login",
       access: "public",
-      handler: chain(validateBody(loginSchema), async (req, res) => {
+      handler: limited("login", chain(validateBody(loginSchema), async (req, res) => {
         const r = await auth.login(body<typeof loginSchema>(req), req.get("user-agent"));
         setRefresh(res, r.refreshToken);
         res.json(withoutRefresh(r));
-      }),
+      })),
     },
     {
       method: "post",
       path: "/auth/refresh",
       access: "public",
-      handler: async (req, res) => {
+      handler: limited("refresh", async (req, res, next) => {
         try {
           const r = await auth.refresh(readRefresh(req), req.get("user-agent"));
           setRefresh(res, r.refreshToken);
           res.json({ token: r.token, user: r.user });
         } catch (err) {
           clearRefresh(res);
-          throw err;
+          next(err);
         }
-      },
+      }),
     },
     {
       method: "post",
@@ -139,29 +147,33 @@ export function routeTable(db: Db, config: Config, deps: RouteDeps): RouteDef[] 
       method: "post",
       path: "/auth/forgot-password",
       access: "public",
-      handler: chain(validateBody(forgotPasswordSchema), async (req, res) => {
+      handler: limited("forgot_password", chain(validateBody(forgotPasswordSchema), async (req, res) => {
         await auth.forgotPassword(body<typeof forgotPasswordSchema>(req));
         res.json({ message: "If that email has an account, a reset link is on its way" });
-      }),
+      })),
     },
     {
       method: "post",
       path: "/auth/reset-password",
       access: "public",
-      handler: chain(validateBody(resetPasswordSchema), async (req, res) => {
+      handler: limited("reset_password", chain(validateBody(resetPasswordSchema), async (req, res) => {
         await auth.resetPassword(body<typeof resetPasswordSchema>(req));
         res.json({ message: "Password updated; log in with the new one" });
-      }),
+      })),
     },
-    { method: "post", path: "/auth/verify-email", access: "public", handler: chain(validateBody(verifyEmailSchema), async (req, res) => res.json({ user: await auth.verifyEmail(body<typeof verifyEmailSchema>(req)) })) },
+    { method: "post", path: "/auth/verify-email", access: "public", handler: limited("verify_email", chain(validateBody(verifyEmailSchema), async (req, res) => res.json({ user: await auth.verifyEmail(body<typeof verifyEmailSchema>(req)) }))) },
     {
       method: "post",
       path: "/auth/resend-verification",
       access: "auth",
-      handler: async (req, res) => {
-        await auth.resendVerification(req.user!.id);
-        res.json({ message: "Verification email sent" });
-      },
+      handler: limited("resend_verification", async (req, res, next) => {
+        try {
+          await auth.resendVerification(req.user!.id);
+          res.json({ message: "Verification email sent" });
+        } catch (err) {
+          next(err);
+        }
+      }),
     },
     { method: "get", path: "/auth/me", access: "auth", handler: async (req, res) => res.json({ user: toUserDTO(req.user!), organization: await auth.primaryOrganization(req.user!.id) }) },
 
@@ -176,6 +188,26 @@ export function routeTable(db: Db, config: Config, deps: RouteDeps): RouteDef[] 
       },
     },
     { method: "get", path: "/organizations/current", access: MembershipRole.VIEWER, handler: (req, res) => res.json(orgDTO(req)) },
+    {
+      method: "get",
+      path: "/organizations/current/features",
+      access: MembershipRole.VIEWER,
+      handler: async (req, res) => res.json({ features: { moneyBrief: briefs.briefEnabled(await briefOrg(req)) } }),
+    },
+    {
+      // Owner-only: feature flags are product decisions (the brief shares metrics with a model vendor when a key is set).
+      method: "patch",
+      path: "/organizations/current/features",
+      access: MembershipRole.OWNER,
+      handler: chain(validateBody(featuresSchema), async (req, res) => {
+        const patch = body<typeof featuresSchema>(req);
+        const current = ((await db.organization.findUnique({ where: { id: req.org!.id }, select: { featureFlags: true } }))?.featureFlags ?? {}) as Record<string, unknown>;
+        const next = { ...current, ...patch };
+        await db.organization.update({ where: { id: req.org!.id }, data: { featureFlags: next } });
+        await db.auditLog.create({ data: { organizationId: req.org!.id, actorUserId: req.user!.id, action: "organization.features.update", entityType: "Organization", entityId: req.org!.id, before: current as Prisma.InputJsonValue, after: next as Prisma.InputJsonValue, requestId: req.id } });
+        res.json({ features: { moneyBrief: next.moneyBrief === true } });
+      }),
+    },
 
     // --- accounts (chart) -------------------------------------------------
     { method: "get", path: "/accounts", access: MembershipRole.VIEWER, handler: async (req, res) => res.json({ data: await txns.accounts(req.org!.id) }) },

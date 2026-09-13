@@ -75,7 +75,7 @@ Model errors are caught by class (`AuthenticationError`, `RateLimitError`, `APIE
 - `GET /briefs/current` generates on the first read of a week and returns the stored row afterwards; `?peek=1` (the Overview's one-line preview) does not consume the first-open reveal.
 - `POST /briefs/current/regenerate` (admin) is capped at 3 per week (`429 brief_regeneration_limit`).
 - `npm run brief:weekly` generates for every organization with the `moneyBrief` flag on and emails verified owners/admins once (`emailed_at`); a stored brief whose email failed is re-sent, not regenerated. Run it from cron on Monday mornings until the pg-boss worker lands.
-- Per-organization flag: `organizations.feature_flags = { "moneyBrief": false }` switches the brief off (`GET /briefs/current` → `{ enabled: false }`).
+- **Off by default.** An owner opts in per organization (Settings → Weekly brief, or `PATCH /organizations/current/features { moneyBrief: true }`, audited). Until then `GET /briefs/current` returns `{ enabled: false }` and nothing is computed or sent. The demo organization is opted in by the seed.
 - Under 14 data days in the last 90 the model is not called at all (`insufficient_data`).
 
 ## Replaying a brief

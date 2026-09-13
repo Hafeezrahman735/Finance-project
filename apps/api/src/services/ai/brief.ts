@@ -53,9 +53,15 @@ export interface BriefDTO {
   createdAt: string;
 }
 
+/**
+ * Off unless the organization opted in (`feature_flags.moneyBrief = true`):
+ * with an Anthropic key set, the brief sends metric labels, values, and
+ * merchant names to a third party, so that is an owner's decision
+ * (Settings → Weekly brief), not a default.
+ */
 export function briefEnabled(org: BriefOrg): boolean {
   const flags = (org.featureFlags ?? {}) as Record<string, unknown>;
-  return flags.moneyBrief !== false;
+  return flags.moneyBrief === true;
 }
 
 export function toBriefInput(org: BriefOrg, view: MetricsView, anomalies: Anomaly[], periodStart: CalendarDate, periodEnd: CalendarDate): BriefInput {

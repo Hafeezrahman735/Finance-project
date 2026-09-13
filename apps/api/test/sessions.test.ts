@@ -155,6 +155,26 @@ run("sessions and account recovery", () => {
     expect((await request(app()).post("/api/v1/auth/reset-password").send({ token: token2, password: "another-long-password" })).body.message).toMatch(/expired/);
   });
 
+  it("rate limits login per IP+email with the error envelope, without touching other emails", async () => {
+    const limitedApp = createApp(db(), { ...testConfig, AUTH_RATE_LIMIT: true }, pino({ level: "silent" }), { email });
+    await signup(app(), "limit@example.com");
+    for (let i = 0; i < 10; i++) {
+      const r = await request(limitedApp).post("/api/v1/auth/login").send({ email: "limit@example.com", password: "wrong-password" });
+      expect(r.status).toBe(401);
+    }
+    const blocked = await request(limitedApp).post("/api/v1/auth/login").send({ email: "limit@example.com", password: "correct-horse-battery" });
+    expect(blocked.status).toBe(429);
+    expect(blocked.body.error).toMatchObject({ type: "rate_limit_error", code: "rate_limited_login" });
+    expect(blocked.body.error.requestId).toBeTypeOf("string");
+    expect(blocked.headers["ratelimit-policy"] ?? blocked.headers["ratelimit"]).toBeDefined();
+    // a different email from the same IP is not blocked
+    await signup(app(), "other@example.com");
+    expect((await request(limitedApp).post("/api/v1/auth/login").send({ email: "other@example.com", password: "correct-horse-battery" })).status).toBe(200);
+    // forgot-password has its own, tighter budget
+    for (let i = 0; i < 5; i++) await request(limitedApp).post("/api/v1/auth/forgot-password").send({ email: "limit@example.com" });
+    expect((await request(limitedApp).post("/api/v1/auth/forgot-password").send({ email: "limit@example.com" })).body.error.code).toBe("rate_limited_forgot_password");
+  });
+
   it("the route table still declares every auth route (matrix coverage)", () => {
     const paths = routeTable(db(), testConfig, { email, briefModel: new OffBriefModel() }).map((r) => `${r.method} ${r.path}`);
     for (const p of ["post /auth/refresh", "post /auth/logout", "post /auth/logout-all", "post /auth/forgot-password", "post /auth/reset-password", "post /auth/verify-email", "post /auth/resend-verification"]) {

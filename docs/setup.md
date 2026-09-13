@@ -59,6 +59,7 @@ cp apps/api/.env.example apps/api/.env
 | `AI_PROVIDER` | no | `anthropic` if a key is set, else `off` | `anthropic` \| `recorded` (replay cassettes from `BRIEF_CASSETTE_DIR`, for CI) \| `off`. |
 | `AI_MODEL` | no | `claude-opus-5` | Model id for the brief. |
 | `BRIEF_RECORD` | no | `false` | With `anthropic`, also save each response as a cassette so `recorded` runs can replay it. |
+| `AUTH_RATE_LIMIT` | no | `true` | Per-IP / per-email limits on `/auth/*` (see [Rate limits](#rate-limits)). Only tests turn it off. |
 | `EMAIL_FROM` | no | `LedgerIQ <onboarding@resend.dev>` | Sender. Resend's `onboarding@resend.dev` only delivers to your own account email; verify a domain for real users. |
 
 The API validates its configuration at boot and prints one line per problem, e.g. `Config error: MONGO_URL is missing. Copy .env.example to .env and set it (docs/setup.md#3-configure-the-api).`
@@ -113,5 +114,15 @@ Transactions → Import (or the Overview's first action). Add the bank account o
 ## What changes next
 
 Done in Slice 1: the Transactions page, CSV import, sessions and recovery, the Overview metrics, and the weekly brief (`docs/ai-brief.md`), each with its vendor key optional. Remaining: Plaid sandbox (1.4b).
+
+### Rate limits
+
+Login: 10 per 15 minutes per IP+email. Register: 5 per hour per IP. Refresh: 60 per 15 minutes per IP. Forgot password: 5 per hour per IP+email. Reset password: 10 per hour per IP. Verify email: 20 per hour per IP. Resend verification: 3 per hour per user. Exceeding one returns `429` with `error.code = rate_limited_<route>` and `RateLimit-*` headers. Counters are in memory per API process (fine for one instance; move to a shared store when there are several). **Behind a reverse proxy or a platform load balancer (Railway, Render, Fly) set `TRUST_PROXY=1` so limits key on the client IP rather than the proxy's.**
+
+### Before the first real user
+
+1. `RESEND_API_KEY` with a verified sending domain, and `APP_URL` set to the public web URL — otherwise verification and reset links only exist in the server log and every user stays "unverified".
+2. `NODE_ENV=production` (secure cookies; refuses `npm run db:seed`).
+3. Decide the AI data-sharing policy before handing out `ANTHROPIC_API_KEY`; the brief stays off per organization until an owner opts in from Settings.
 
 **Weekly brief run.** `npm run brief:weekly` (from the repo root: `npm run brief:weekly --workspace @ledgeriq/api`) generates this week's brief for every organization and emails verified owners. Schedule it for Monday morning with cron or Task Scheduler until the pg-boss worker lands; it is idempotent, so running it twice sends nothing twice.

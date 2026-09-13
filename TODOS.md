@@ -5,6 +5,11 @@ Plan: `~/.claude/plans/make-a-plan-to-witty-torvalds.md`. CEO plan: `~/.gstack/p
 
 ## Pre-tester prerequisites (P1, before Slice 1 reaches outside users)
 
+### Configure Resend and APP_URL before the first real user
+- **What:** `RESEND_API_KEY` with a verified domain and `APP_URL` = the public web URL; then ask existing users to confirm their email once.
+- **Why:** Without a key, verification and reset links are only printed to the server log, so every account stays unverified and nobody can recover a password.
+- **Effort:** S (calendar: domain verification).
+
 ### Trademark check on the working name
 - **What:** Confirm "LedgerIQ" (or the chosen name) is not registered in finance/software before anything public.
 - **Why:** Renaming after launch costs domains, emails, and trust.
@@ -31,6 +36,11 @@ Plan: `~/.claude/plans/make-a-plan-to-witty-torvalds.md`. CEO plan: `~/.gstack/p
 - **What:** Record `claude-opus-5` responses for the demo org into `apps/api/fixtures/cassettes/brief/` (`AI_PROVIDER=anthropic BRIEF_RECORD=true`), run them in CI via `AI_PROVIDER=recorded`, and a nightly live job asserting planted-anomaly recall ≥ 95% and zero ungrounded numbers.
 - **Why:** CI today covers the pipeline with a scripted fake model; the model's own behaviour is untested until there is an API key.
 - **Effort:** S. **Depends on:** `ANTHROPIC_API_KEY` (pay as you go).
+
+### Shared rate-limit store
+- **What:** Move the `/auth/*` limiter counters from process memory to Postgres or Redis.
+- **Why:** Limits are per process today; with two API instances an attacker gets double the budget.
+- **Effort:** S. **Depends on:** running more than one API instance.
 
 ### pg-boss worker: weekly brief schedule and Plaid sync (Slice 1 → 1.4b)
 - **What:** Replace the cron entry for `npm run brief:weekly` with a pg-boss `singletonKey` job, and host the Plaid sync there.
@@ -80,7 +90,6 @@ Plan: `~/.claude/plans/make-a-plan-to-witty-torvalds.md`. CEO plan: `~/.gstack/p
 ### Slice 1 follow-ups
 - Plaid webhook receiver with local tunnel (`/sandbox/item/fire_webhook`); Slice 1 uses "Sync now" polling.
 - Email verification, password reset (lane 1.1) and the emailed brief (lane E8, `npm run brief:weekly`) have landed.
-- Rate limiting on `/auth/*` (plan 1.1): per-IP and per-email counters for login, forgot-password, and resend-verification.
 - Gate outbound sends (invoices, Slice 2) on `emailVerifiedAt`; the flag is exposed on `/auth/me` today.
 
 ## Developer experience

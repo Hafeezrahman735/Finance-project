@@ -75,5 +75,6 @@ function sampleBody(method: string, path: string): Record<string, unknown> | und
   if (method === "get" || method === "delete") return undefined;
   if (path === "/transactions") return { direction: "out", amountMinor: 100, date: "2026-09-01", memo: "matrix" };
   if (path === "/transactions/:id") return { version: 1, memo: "matrix" };
+  if (path === "/organizations/current/features") return { moneyBrief: false };
   return {};
 }

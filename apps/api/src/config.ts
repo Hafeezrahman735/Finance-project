@@ -11,6 +11,9 @@ import { z } from "zod";
  *
  * Every failure message names the variable and points at docs/setup.md.
  */
+/** "true"/"1"/"yes" → true, "false"/"0"/"no"/"" → false (z.coerce.boolean would make "false" true). */
+const envBool = (fallback: boolean) => z.preprocess((v) => (v === undefined || v === "" ? fallback : ["1", "true", "yes", "on"].includes(String(v).toLowerCase())), z.boolean());
+
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   DATABASE_URL: z.string().min(1),
@@ -30,7 +33,11 @@ const schema = z.object({
   AI_MODEL: z.string().default("claude-opus-5"),
   BRIEF_CASSETTE_DIR: z.string().default("fixtures/cassettes/brief"),
   /** With AI_PROVIDER=anthropic, also write each live response into BRIEF_CASSETTE_DIR for later recorded runs. */
-  BRIEF_RECORD: z.coerce.boolean().default(false),
+  BRIEF_RECORD: envBool(false),
+  /** Per-IP/per-email limits on /auth/* (pre-tester prerequisite). Off only for tests. */
+  AUTH_RATE_LIMIT: envBool(true),
+  /** Express "trust proxy" setting when behind a load balancer ("1", "true", or a CIDR list) so req.ip is the client. */
+  TRUST_PROXY: z.string().min(1).optional(),
   PORT: z.coerce.number().int().positive().default(8000),
   CLIENT_URL: z.string().url().optional(),
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "silent"]).default("info"),

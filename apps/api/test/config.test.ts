@@ -12,4 +12,13 @@ describe("config", () => {
     expect(c.LOG_LEVEL).toBe("info");
     expect(c.NODE_ENV).toBe("development");
   });
+
+  it("parses booleans the way people write them in .env", () => {
+    const base = { DATABASE_URL: "postgresql://x", JWT_SECRET: "0123456789abcdef" };
+    expect(loadConfig(base).AUTH_RATE_LIMIT).toBe(true);
+    expect(loadConfig({ ...base, AUTH_RATE_LIMIT: "false" }).AUTH_RATE_LIMIT).toBe(false);
+    expect(loadConfig({ ...base, AUTH_RATE_LIMIT: "0" }).AUTH_RATE_LIMIT).toBe(false);
+    expect(loadConfig({ ...base, BRIEF_RECORD: "true" }).BRIEF_RECORD).toBe(true);
+    expect(loadConfig({ ...base, BRIEF_RECORD: "" }).BRIEF_RECORD).toBe(false);
+  });
 });

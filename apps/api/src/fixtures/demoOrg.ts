@@ -40,6 +40,8 @@ function rng(seed: number) {
 }
 
 export async function seedDemoOrg(db: Db, opts: { today?: CalendarDate; seed?: number } = {}): Promise<DemoSummary> {
+  // Development-only fixture: the re-seed path below bypasses the ledger's delete guards, which must never run against real books.
+  if (process.env.NODE_ENV === "production") throw new Error("seedDemoOrg refuses to run with NODE_ENV=production");
   const random = rng(opts.seed ?? 20260912);
   const timezone = "America/Chicago";
   const today = opts.today ?? todayIn(timezone);
@@ -70,7 +72,8 @@ export async function seedDemoOrg(db: Db, opts: { today?: CalendarDate; seed?: n
   }
 
   const org = await db.organization.create({
-    data: { name: DEMO_ORG_NAME, timezone, memberships: { create: { userId: user.id, role: MembershipRole.OWNER } } },
+    // The demo org opts into the weekly brief so `npm run setup` shows one; real orgs opt in from Settings.
+    data: { name: DEMO_ORG_NAME, timezone, featureFlags: { moneyBrief: true }, memberships: { create: { userId: user.id, role: MembershipRole.OWNER } } },
   });
 
   let entries = 0;

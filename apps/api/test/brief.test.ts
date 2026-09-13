@@ -197,7 +197,7 @@ run("weekly brief service", () => {
 
   it("stores a GENERATED brief with its input snapshot and raw response; the second read is served, not regenerated", async () => {
     const summary = await seedDemoOrg(db(), { today: "2026-09-12" });
-    const o = { id: summary.organizationId, name: "Sunny Side Studio", currency: "USD", timezone: "America/Chicago" };
+    const o = { id: summary.organizationId, name: "Sunny Side Studio", currency: "USD", timezone: "America/Chicago", featureFlags: { moneyBrief: true } };
     // Build a grounded answer from the real input so numbers match.
     const view = await metricsService(db()).get(o.id, "USD", o.timezone, NOW);
     const anomalies = detectAnomalies(view);
@@ -231,7 +231,7 @@ run("weekly brief service", () => {
 
   it("retries once with the validator's feedback, then degrades to the deterministic summary", async () => {
     const summary = await seedDemoOrg(db(), { today: "2026-09-12" });
-    const o = { id: summary.organizationId, name: "Sunny Side Studio", currency: "USD", timezone: "America/Chicago" };
+    const o = { id: summary.organizationId, name: "Sunny Side Studio", currency: "USD", timezone: "America/Chicago", featureFlags: { moneyBrief: true } };
     const bad = { ...goodBrief, headline: "Revenue rose to $9,999.99 this month." };
     const model = new FakeModel([ok(bad), ok(bad)]);
     const s = svc(model);
@@ -246,7 +246,7 @@ run("weekly brief service", () => {
 
   it("degrades cleanly on refusal, on model-off, and on insufficient data (no model call at all)", async () => {
     const summary = await seedDemoOrg(db(), { today: "2026-09-12" });
-    const o = { id: summary.organizationId, name: "Sunny Side Studio", currency: "USD", timezone: "America/Chicago" };
+    const o = { id: summary.organizationId, name: "Sunny Side Studio", currency: "USD", timezone: "America/Chicago", featureFlags: { moneyBrief: true } };
     const refused = await svc(new FakeModel([{ brief: null, raw: "", model: "claude-opus-5", failure: "refused" }])).generate(o, NOW);
     expect(refused).toMatchObject({ status: "DEGRADED", degradedReason: "refused" });
 
@@ -263,7 +263,7 @@ run("weekly brief service", () => {
 
   it("caps regeneration per week and emails verified owners once", async () => {
     const summary = await seedDemoOrg(db(), { today: "2026-09-12" });
-    const o = { id: summary.organizationId, name: "Sunny Side Studio", currency: "USD", timezone: "America/Chicago" };
+    const o = { id: summary.organizationId, name: "Sunny Side Studio", currency: "USD", timezone: "America/Chicago", featureFlags: { moneyBrief: true } };
     const email = new CapturingEmailSink();
     const s = svc(new FakeModel([]), email); // model off: every brief is the deterministic summary
     const first = await s.generate(o, NOW);
@@ -291,9 +291,17 @@ run("weekly brief service", () => {
 run("brief routes", () => {
   const db = usePg();
 
-  it("GET /briefs/current generates on first read, lists, fetches by id, and 404s foreign ids; the flag switches it off", async () => {
+  it("the brief is off by default; an owner opts in from the features route (audited), then GET /briefs/current generates on first read, lists, fetches by id, and 404s foreign ids", async () => {
     const app = makeApp(db(), {}, { briefModel: new FakeModel([]) });
     const s = await signup(app);
+    // Default: off (data-sharing is an owner decision).
+    expect((await request(app).get("/api/v1/briefs/current").set(auth(s))).body).toEqual({ enabled: false, brief: null });
+    expect((await request(app).get("/api/v1/organizations/current/features").set(auth(s))).body).toEqual({ features: { moneyBrief: false } });
+    const on = await request(app).patch("/api/v1/organizations/current/features").set(auth(s)).send({ moneyBrief: true });
+    expect(on.body).toEqual({ features: { moneyBrief: true } });
+    expect(await db().auditLog.count({ where: { organizationId: s.organization.id, action: "organization.features.update" } })).toBe(1);
+    expect((await request(app).patch("/api/v1/organizations/current/features").set(auth(s)).send({ moneyBrief: "yes" })).status).toBe(400);
+
     const first = await request(app).get("/api/v1/briefs/current").set(auth(s));
     expect(first.status).toBe(200);
     expect(first.body.enabled).toBe(true);
@@ -307,7 +315,7 @@ run("brief routes", () => {
     const other = await signup(app);
     expect((await request(app).get(`/api/v1/briefs/${first.body.brief.id}`).set(auth(other))).status).toBe(404);
 
-    await db().organization.update({ where: { id: s.organization.id }, data: { featureFlags: { moneyBrief: false } } });
+    await request(app).patch("/api/v1/organizations/current/features").set(auth(s)).send({ moneyBrief: false });
     const off = await request(app).get("/api/v1/briefs/current").set(auth(s));
     expect(off.body).toEqual({ enabled: false, brief: null });
     expect((await request(app).post("/api/v1/briefs/current/email").set(auth(s))).body.error.code).toBe("brief_disabled");

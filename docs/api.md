@@ -24,11 +24,13 @@ Source of truth: the route table in `apps/api/src/routes.ts`. Every route there 
 | POST | `/auth/verify-email` | public | `token` | `{ user }` with `emailVerifiedAt` set; 24-hour single-use link `APP_URL/verify-email?token=…` sent on register |
 | POST | `/auth/resend-verification` | auth | — | `{ message }`; no-op once verified |
 | GET | `/auth/me` | auth | — | `{ user: { id, fullName, email, emailVerifiedAt, createdAt }, organization }` |
+| GET | `/organizations/current/features` | VIEWER | — | `{ features: { moneyBrief } }` |
+| PATCH | `/organizations/current/features` | OWNER | `moneyBrief: boolean` | `{ features }`; audited (`organization.features.update`). The brief is off until an owner opts in |
 | GET | `/organizations` | auth | — | `{ data: [ { id, name, currency, timezone, role } ] }` |
 | GET | `/organizations/current` | VIEWER | — | `{ id, name, currency, timezone, role }` |
 | GET | `/accounts` | VIEWER | — | `{ data: [ { id, name, code, type, systemKey } ] }` |
 | GET | `/dashboard` | VIEWER | — | totals, cash on hand, uncategorized count, 30/60-day windows, recent transactions (all in minor units) |
-| GET | `/briefs/current` | VIEWER | `?peek=1` | `{ enabled, brief }`: this week's Money Brief, generated on the first read (`docs/ai-brief.md`). `brief` = `{ id, periodStart, periodEnd, asOf, status: GENERATED|DEGRADED, model, degradedReason, brief: { headline, warm_line, findings[], suggested_actions[], disclaimer }, anomalies[], metrics{id → {label, display, window, prev?, note?}}, insufficientData, dataDays, firstOpen, regenerations, createdAt }`. `enabled: false` when the org's `moneyBrief` flag is off. `peek=1` does not consume the first-open reveal |
+| GET | `/briefs/current` | VIEWER | `?peek=1` | `{ enabled, brief }`: this week's Money Brief, generated on the first read (`docs/ai-brief.md`). `brief` = `{ id, periodStart, periodEnd, asOf, status: GENERATED|DEGRADED, model, degradedReason, brief: { headline, warm_line, findings[], suggested_actions[], disclaimer }, anomalies[], metrics{id → {label, display, window, prev?, note?}}, insufficientData, dataDays, firstOpen, regenerations, createdAt }`. `enabled: false` unless the org's `moneyBrief` flag is on (default off; owners opt in via `PATCH /organizations/current/features`). `peek=1` does not consume the first-open reveal |
 | POST | `/briefs/current/regenerate` | ADMIN | — | `{ brief }`; at most 3 per week, then `429 brief_regeneration_limit` |
 | POST | `/briefs/current/email` | ADMIN | — | `{ sent }`: emails the stored brief to verified owners/admins; `404 brief_disabled` when off |
 | GET | `/briefs` | VIEWER | — | `{ data: [ { id, periodStart, periodEnd, status, createdAt } ] }`, newest first |
@@ -89,6 +91,7 @@ Source of truth: the route table in `apps/api/src/routes.ts`. Every route there 
 | `refresh_missing`, `refresh_invalid`, `refresh_expired`, `refresh_revoked`, `refresh_reused` | 401 | `/auth/refresh`; every one clears the cookie, `refresh_reused` also revoked the family |
 | `insufficient_role` | 403 | role below the route's minimum |
 | `brief_regeneration_limit` | 429 | this week's brief was regenerated 3 times already |
+| `rate_limited_login`, `rate_limited_register`, `rate_limited_refresh`, `rate_limited_forgot_password`, `rate_limited_reset_password`, `rate_limited_verify_email`, `rate_limited_resend_verification` | 429 | auth rate limits (`docs/setup.md#rate-limits`); `RateLimit-*` headers say when to retry |
 | `not_found`, `entry_not_found`, `organization_not_found`, `brief_not_found`, `brief_disabled`, `route_not_found` | 404 | includes foreign ids and malformed ids |
 | `email_taken`, `bank_account_exists` | 409 | register / bank accounts |
 | `import_not_mapped`, `import_committed` | 409 | import step out of order |

@@ -34,6 +34,12 @@ export const dashboard = {
   get: () => axiosInstance.get(API_PATHS.DASHBOARD.GET_DATA).then((r) => r.data),
 };
 
+/** Per-organization feature flags; owners can change them. */
+export const features = {
+  get: () => axiosInstance.get(API_PATHS.ORGANIZATIONS.FEATURES).then((r) => r.data.features),
+  update: (patch) => axiosInstance.patch(API_PATHS.ORGANIZATIONS.FEATURES, patch).then((r) => r.data.features),
+};
+
 /** Weekly Money Brief (plan E8). `current` generates this week's on first read; `peek` reads without marking the first open. */
 export const briefs = {
   current: () => axiosInstance.get(API_PATHS.BRIEFS.CURRENT, { timeout: 90000 }).then((r) => r.data),
