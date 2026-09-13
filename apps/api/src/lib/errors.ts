@@ -9,7 +9,7 @@ import { ZodError } from "zod";
  * `message` is kept at the top level because the current web app reads
  * `error.response.data.message`; new client code switches on `error.code`.
  */
-export type ErrorType = "validation_error" | "authentication_error" | "permission_error" | "not_found" | "conflict" | "internal_error";
+export type ErrorType = "validation_error" | "authentication_error" | "permission_error" | "not_found" | "conflict" | "rate_limit_error" | "internal_error";
 
 export class AppError extends Error {
   constructor(
@@ -45,6 +45,12 @@ export class ForbiddenError extends AppError {
 export class NotFoundError extends AppError {
   constructor(message = "Not found", code = "not_found") {
     super(404, "not_found", code, message);
+  }
+}
+
+export class RateLimitError extends AppError {
+  constructor(message: string, code = "rate_limited") {
+    super(429, "rate_limit_error", code, message);
   }
 }
 

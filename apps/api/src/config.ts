@@ -23,6 +23,14 @@ const schema = z.object({
   /** Optional: without it, emails are logged to the console instead of sent. */
   RESEND_API_KEY: z.string().min(1).optional(),
   EMAIL_FROM: z.string().default("LedgerIQ <onboarding@resend.dev>"),
+  /** Optional: without it the weekly brief is the deterministic summary (AI_PROVIDER=off). */
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
+  /** anthropic = live model; recorded = replay cassettes in BRIEF_CASSETTE_DIR (CI); off = deterministic summary only. */
+  AI_PROVIDER: z.enum(["anthropic", "recorded", "off"]).optional(),
+  AI_MODEL: z.string().default("claude-opus-5"),
+  BRIEF_CASSETTE_DIR: z.string().default("fixtures/cassettes/brief"),
+  /** With AI_PROVIDER=anthropic, also write each live response into BRIEF_CASSETTE_DIR for later recorded runs. */
+  BRIEF_RECORD: z.coerce.boolean().default(false),
   PORT: z.coerce.number().int().positive().default(8000),
   CLIENT_URL: z.string().url().optional(),
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "silent"]).default("info"),

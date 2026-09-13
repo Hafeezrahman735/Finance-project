@@ -9,6 +9,7 @@ import VerifyBanner from "./VerifyBanner";
 const NAV = [
   { key: "overview", label: "Overview", to: "/overview" },
   { key: "transactions", label: "Transactions", to: "/transactions" },
+  { key: "brief", label: "Brief", to: "/brief" },
   { key: "import", label: "Import", to: "/import" },
   { key: "settings", label: "Settings", to: "/settings" },
 ];

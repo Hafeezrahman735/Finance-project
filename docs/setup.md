@@ -55,6 +55,10 @@ cp apps/api/.env.example apps/api/.env
 | `REFRESH_TOKEN_DAYS` | no | `30` | How long a signed-in browser stays signed in without logging in again. |
 | `APP_URL` | no | `http://localhost:5173` | Where emailed links point (`/reset-password`, `/verify-email`). Set to the web app's public URL in production. |
 | `RESEND_API_KEY` | no | none | Sends verification and reset emails through [Resend](https://resend.com) (free tier: 3,000 emails/month, no card). **Without it, every email is printed to the API log with the link in it**, which is how local development works with zero vendor keys. |
+| `ANTHROPIC_API_KEY` | no | none | Narrates the weekly brief with `claude-opus-5`. **Without it the brief is the deterministic summary** ("This week's numbers"), which is how zero-key development works. Get a key at https://console.anthropic.com (pay as you go; a weekly brief is a few cents). |
+| `AI_PROVIDER` | no | `anthropic` if a key is set, else `off` | `anthropic` \| `recorded` (replay cassettes from `BRIEF_CASSETTE_DIR`, for CI) \| `off`. |
+| `AI_MODEL` | no | `claude-opus-5` | Model id for the brief. |
+| `BRIEF_RECORD` | no | `false` | With `anthropic`, also save each response as a cassette so `recorded` runs can replay it. |
 | `EMAIL_FROM` | no | `LedgerIQ <onboarding@resend.dev>` | Sender. Resend's `onboarding@resend.dev` only delivers to your own account email; verify a domain for real users. |
 
 The API validates its configuration at boot and prints one line per problem, e.g. `Config error: MONGO_URL is missing. Copy .env.example to .env and set it (docs/setup.md#3-configure-the-api).`
@@ -108,4 +112,6 @@ Transactions → Import (or the Overview's first action). Add the bank account o
 
 ## What changes next
 
-The Slice 1 feature lanes add Plaid, Anthropic, and Resend as optional keys whose features switch off when absent, plus the Transactions page, CSV import, the Overview metrics, and the weekly brief (`docs/architecture.md`).
+Done in Slice 1: the Transactions page, CSV import, sessions and recovery, the Overview metrics, and the weekly brief (`docs/ai-brief.md`), each with its vendor key optional. Remaining: Plaid sandbox (1.4b).
+
+**Weekly brief run.** `npm run brief:weekly` (from the repo root: `npm run brief:weekly --workspace @ledgeriq/api`) generates this week's brief for every organization and emails verified owners. Schedule it for Monday morning with cron or Task Scheduler until the pg-boss worker lands; it is idempotent, so running it twice sends nothing twice.

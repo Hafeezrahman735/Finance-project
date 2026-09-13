@@ -5,7 +5,7 @@ import InOutChart from "../components/overview/InOutChart";
 import Numbers from "../components/overview/Numbers";
 import Button from "../components/ui/Button";
 import { useUserAuth } from "../hooks/useUserAuth";
-import { dashboard as dashboardApi, errorMessage, metrics as metricsApi } from "../lib/api";
+import { briefs as briefsApi, dashboard as dashboardApi, errorMessage, metrics as metricsApi } from "../lib/api";
 import { headlineCopy, money, shortDate } from "../lib/format";
 
 /**
@@ -18,6 +18,7 @@ export default function Overview() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [numbers, setNumbers] = useState(null);
+  const [brief, setBrief] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -28,6 +29,8 @@ export default function Overview() {
       const [d, m] = await Promise.all([dashboardApi.get(), metricsApi.get().catch(() => null)]);
       setData(d);
       setNumbers(m);
+      // The brief is one line here and its own page; peek so the first-open reveal stays for /brief.
+      briefsApi.peek().then((b) => setBrief(b.enabled ? b.brief : null)).catch(() => setBrief(null));
     } catch (err) {
       setError(errorMessage(err, "Could not load the overview"));
     } finally {
@@ -111,6 +114,13 @@ export default function Overview() {
             </div>
             <InOutChart daily={data.last30Days.daily} currency={data.currency} />
           </section>
+
+          {brief && (
+            <p className="mt-10 border-y border-line py-3 text-base">
+              <span className="text-muted">This week's brief: </span>
+              {brief.brief.headline} <Link to="/brief">Read</Link>
+            </p>
+          )}
 
           <Numbers view={numbers} />
 

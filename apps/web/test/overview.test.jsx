@@ -7,6 +7,7 @@ import UserProvider from "../src/context/UserProvider";
 vi.mock("../src/lib/api", () => ({
   dashboard: { get: vi.fn() },
   metrics: { get: vi.fn().mockRejectedValue(new Error("no metrics")) },
+  briefs: { peek: vi.fn().mockResolvedValue({ enabled: true, brief: { brief: { headline: "You kept $550.00 of $1,000.00 in sales." } } }) },
   auth: { me: vi.fn().mockResolvedValue({ user: { id: "u1", fullName: "Demo Owner", email: "demo@ledgeriq.local" }, organization: { id: "o1", name: "Sunny Side Studio", role: "OWNER" } }) },
   errorMessage: (e, f) => e?.message || f,
 }));
@@ -124,6 +125,8 @@ describe("Overview", () => {
     expect(screen.getByText("CANVA")).toBeInTheDocument();
     expect(screen.getByText(/up 131%/)).toBeInTheDocument();
     expect(screen.getByText(/Stripe: 11 days since the last payout/)).toBeInTheDocument();
+    expect(await screen.findByText(/This week's brief:/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Read" })).toHaveAttribute("href", "/brief");
   });
 
   it("surfaces a load error with a retry", async () => {

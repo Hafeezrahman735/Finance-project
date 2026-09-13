@@ -19,9 +19,11 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
-    "migrate:mongo": "tsx scripts/migrate-mongo-to-pg.ts"
+    "migrate:mongo": "tsx scripts/migrate-mongo-to-pg.ts",
+    "brief:weekly": "tsx scripts/weekly-brief.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.125.0",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "bcryptjs": "^3.0.2",

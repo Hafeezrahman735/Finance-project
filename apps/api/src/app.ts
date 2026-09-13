@@ -8,6 +8,7 @@ import { errorHandler, notFoundHandler } from "./lib/errors.js";
 import { requestLogger } from "./lib/logger.js";
 import { buildRouter, type RouteDeps } from "./routes.js";
 import { createEmailSink } from "./services/email/email.js";
+import { createBriefModel } from "./services/ai/model.js";
 
 /**
  * Request flow:
@@ -44,7 +45,7 @@ export function createApp(db: Db, config: Config, logger: Logger, deps: Partial<
     await db.$queryRaw`SELECT 1`;
     res.json({ ok: true });
   });
-  app.use("/api/v1", buildRouter(db, config, { email: deps.email ?? createEmailSink(config, logger), logger }));
+  app.use("/api/v1", buildRouter(db, config, { email: deps.email ?? createEmailSink(config, logger), briefModel: deps.briefModel ?? createBriefModel(config, logger), logger }));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

@@ -28,6 +28,13 @@ export const API_PATHS = {
     GET_DATA: "/api/v1/dashboard",
   },
   METRICS: { GET: "/api/v1/metrics" },
+  BRIEFS: {
+    CURRENT: "/api/v1/briefs/current",
+    REGENERATE: "/api/v1/briefs/current/regenerate",
+    EMAIL: "/api/v1/briefs/current/email",
+    LIST: "/api/v1/briefs",
+    ONE: (id) => `/api/v1/briefs/${id}`,
+  },
   BANK_ACCOUNTS: { LIST: "/api/v1/bank-accounts" },
   IMPORTS: {
     LIST: "/api/v1/imports",

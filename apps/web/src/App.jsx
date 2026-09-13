@@ -8,6 +8,7 @@ import ForgotPassword from "./pages/Auth/ForgotPassword";
 import ResetPassword from "./pages/Auth/ResetPassword";
 import VerifyEmail from "./pages/Auth/VerifyEmail";
 import Overview from "./pages/Overview";
+import Brief from "./pages/Brief";
 import Transactions from "./pages/Transactions";
 import Import from "./pages/Import";
 import Settings from "./pages/Settings";
@@ -27,6 +28,7 @@ export default function App() {
           <Route path="/overview" element={<Overview />} />
           <Route path="/dashboard" element={<Navigate to="/overview" replace />} />
           <Route path="/transactions" element={<Transactions />} />
+          <Route path="/brief" element={<Brief />} />
           <Route path="/import" element={<Import />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/income" element={<Navigate to="/transactions" replace />} />

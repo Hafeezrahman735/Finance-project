@@ -5,7 +5,7 @@ import AddTransactionForm from "../components/transactions/AddTransactionForm";
 import CategoryPicker from "../components/transactions/CategoryPicker";
 import TransactionRow from "../components/transactions/TransactionRow";
 import Button from "../components/ui/Button";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useUserAuth } from "../hooks/useUserAuth";
 import { accounts as accountsApi, errorCode, errorMessage, rules as rulesApi, transactions as txApi } from "../lib/api";
 import { money } from "../lib/format";
@@ -26,7 +26,8 @@ const FILTERS = [
 export default function Transactions() {
   useUserAuth();
   const navigate = useNavigate();
-  const [filter, setFilter] = useState("all");
+  const [params] = useSearchParams();
+  const [filter, setFilter] = useState(FILTERS.some((f) => f.key === params.get("filter")) ? params.get("filter") : "all");
   const [queue, setQueue] = useState([]); // uncategorized (always fetched; shown first)
   const [rows, setRows] = useState([]); // the filtered list (may overlap queue; de-duplicated on render)
   const [nextCursor, setNextCursor] = useState(null);
@@ -41,7 +42,7 @@ export default function Transactions() {
   const [focusIndex, setFocusIndex] = useState(-1);
   const [bulkResult, setBulkResult] = useState(null); // { done, failed: [ids] }
   const searchRef = useRef(null);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(params.get("q") ?? ""); // /transactions?q=… from the brief's evidence links
 
   const load = useCallback(
     async (opts = {}) => {

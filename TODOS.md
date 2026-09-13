@@ -23,9 +23,19 @@ Plan: `~/.claude/plans/make-a-plan-to-witty-torvalds.md`. CEO plan: `~/.gstack/p
 ## Deferred features
 
 ### Recurring-charge anomaly alerting (Phase 4)
-- **What:** Alert when a detected recurring charge jumps by more than X% or a new recurring charge appears.
-- **Why:** Detection ships in Slice 1 metrics; alerting needs history and the brief delivery channel.
-- **Effort:** S. **Depends on:** Slice 1 metrics history, Phase 4 anomaly rules.
+- **What:** A new recurring charge appearing (not just a jump) as its own rule; push/email alerting between briefs.
+- **Why:** The jump rule and in-brief delivery landed in E8; "new subscription" needs more history to be reliable.
+- **Effort:** S. **Depends on:** metrics history beyond 90 days.
+
+### Brief evals: recorded cassettes and a nightly live run (E8 follow-up)
+- **What:** Record `claude-opus-5` responses for the demo org into `apps/api/fixtures/cassettes/brief/` (`AI_PROVIDER=anthropic BRIEF_RECORD=true`), run them in CI via `AI_PROVIDER=recorded`, and a nightly live job asserting planted-anomaly recall ≥ 95% and zero ungrounded numbers.
+- **Why:** CI today covers the pipeline with a scripted fake model; the model's own behaviour is untested until there is an API key.
+- **Effort:** S. **Depends on:** `ANTHROPIC_API_KEY` (pay as you go).
+
+### pg-boss worker: weekly brief schedule and Plaid sync (Slice 1 → 1.4b)
+- **What:** Replace the cron entry for `npm run brief:weekly` with a pg-boss `singletonKey` job, and host the Plaid sync there.
+- **Why:** One worker process for every job; the plan's failure-mode table assumes queue retries.
+- **Effort:** S. **Depends on:** 1.4b starting.
 
 ### Accountant read-only invite and multi-org switcher (Phase 2)
 - **What:** Invite by email with role, accountant view (read-only + export + comments), and the org switcher UI.
@@ -69,7 +79,7 @@ Plan: `~/.claude/plans/make-a-plan-to-witty-torvalds.md`. CEO plan: `~/.gstack/p
 
 ### Slice 1 follow-ups
 - Plaid webhook receiver with local tunnel (`/sandbox/item/fire_webhook`); Slice 1 uses "Sync now" polling.
-- Emailed brief (dropped from the minimum cut). Email verification and password reset landed in lane 1.1.
+- Email verification, password reset (lane 1.1) and the emailed brief (lane E8, `npm run brief:weekly`) have landed.
 - Rate limiting on `/auth/*` (plan 1.1): per-IP and per-email counters for login, forgot-password, and resend-verification.
 - Gate outbound sends (invoices, Slice 2) on `emailVerifiedAt`; the flag is exposed on `/auth/me` today.
 

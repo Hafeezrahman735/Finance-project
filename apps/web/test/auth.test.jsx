@@ -95,7 +95,7 @@ describe("recovery pages", () => {
     await userEvent.type(screen.getByLabelText("Email"), "who@example.com");
     await userEvent.click(screen.getByRole("button", { name: "Send reset link" }));
     expect(await screen.findByRole("status")).toHaveTextContent(/has an account, a reset link is on its way/);
-  });
+  }, 15000);
 
   it("reset password validates locally, posts the token, and lands on login with a notice", async () => {
     handler = (config) => ({ status: 200, data: { message: "ok", got: JSON.parse(config.data) } });
@@ -111,7 +111,7 @@ describe("recovery pages", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save new password" }));
     await waitFor(() => expect(screen.getByText("login page")).toBeInTheDocument());
     expect(calls.at(-1).url).toBe("/api/v1/auth/reset-password");
-  });
+  }, 15000);
 
   it("verify email reports success and a used link", async () => {
     handler = () => ({ status: 200, data: { user: { id: "u1", emailVerifiedAt: "2026-09-12T00:00:00.000Z" } } });

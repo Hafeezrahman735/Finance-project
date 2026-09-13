@@ -28,6 +28,11 @@ Source of truth: the route table in `apps/api/src/routes.ts`. Every route there 
 | GET | `/organizations/current` | VIEWER | — | `{ id, name, currency, timezone, role }` |
 | GET | `/accounts` | VIEWER | — | `{ data: [ { id, name, code, type, systemKey } ] }` |
 | GET | `/dashboard` | VIEWER | — | totals, cash on hand, uncategorized count, 30/60-day windows, recent transactions (all in minor units) |
+| GET | `/briefs/current` | VIEWER | `?peek=1` | `{ enabled, brief }`: this week's Money Brief, generated on the first read (`docs/ai-brief.md`). `brief` = `{ id, periodStart, periodEnd, asOf, status: GENERATED|DEGRADED, model, degradedReason, brief: { headline, warm_line, findings[], suggested_actions[], disclaimer }, anomalies[], metrics{id → {label, display, window, prev?, note?}}, insufficientData, dataDays, firstOpen, regenerations, createdAt }`. `enabled: false` when the org's `moneyBrief` flag is off. `peek=1` does not consume the first-open reveal |
+| POST | `/briefs/current/regenerate` | ADMIN | — | `{ brief }`; at most 3 per week, then `429 brief_regeneration_limit` |
+| POST | `/briefs/current/email` | ADMIN | — | `{ sent }`: emails the stored brief to verified owners/admins; `404 brief_disabled` when off |
+| GET | `/briefs` | VIEWER | — | `{ data: [ { id, periodStart, periodEnd, status, createdAt } ] }`, newest first |
+| GET | `/briefs/:id` | VIEWER | — | `{ brief }`; foreign ids are 404 |
 | GET | `/metrics` | VIEWER | — | `MetricsView`: `metrics[]` (each `{ id, label, value, unit, display, window, prev?, channelId?, note? }`), `channels[]`, `recurring[]`, `processors[]`, `dataDays`, `insufficientData`. Last 30 days vs the prior 30 in the org timezone; cached per (org, day) and recomputed when the ledger changes. Ids are stable (`cash_on_hand`, `runway_days`, `gross_margin_pct_30d`, `roas_30d`, `channel:<id>:fee_rate`, `recurring:<slug>:amount`, `clearing:<processor>:days_since_payout`); `display` is the string the brief is allowed to quote |
 | GET | `/transactions` | VIEWER | `cursor, limit≤200, direction=in\|out, status=uncategorized\|all, from, to, includeReversed` | `{ data: Transaction[], nextCursor }` |
 | GET | `/transactions/export.xlsx` | VIEWER | same filters | `.xlsx` stream |
@@ -83,7 +88,8 @@ Source of truth: the route table in `apps/api/src/routes.ts`. Every route there 
 | `missing_token`, `invalid_token`, `token_expired`, `unknown_user`, `invalid_credentials`, `no_organization` | 401 | authentication; the web client refreshes once on `token_expired` / `invalid_token` |
 | `refresh_missing`, `refresh_invalid`, `refresh_expired`, `refresh_revoked`, `refresh_reused` | 401 | `/auth/refresh`; every one clears the cookie, `refresh_reused` also revoked the family |
 | `insufficient_role` | 403 | role below the route's minimum |
-| `not_found`, `entry_not_found`, `organization_not_found`, `route_not_found` | 404 | includes foreign ids and malformed ids |
+| `brief_regeneration_limit` | 429 | this week's brief was regenerated 3 times already |
+| `not_found`, `entry_not_found`, `organization_not_found`, `brief_not_found`, `brief_disabled`, `route_not_found` | 404 | includes foreign ids and malformed ids |
 | `email_taken`, `bank_account_exists` | 409 | register / bank accounts |
 | `import_not_mapped`, `import_committed` | 409 | import step out of order |
 | `file_too_large`, `too_many_rows` | 400 | upload limits |

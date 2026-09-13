@@ -55,6 +55,8 @@ model Organization {
   currency  String   @default("USD") @db.Char(3)
   /// IANA timezone used for "today", "last 30 days", and the weekly brief's Monday.
   timezone  String   @default("America/New_York")
+  /// Per-organization feature flags, e.g. { "moneyBrief": false }. Absent = the default in services/ai/brief.ts.
+  featureFlags Json  @default("{}") @map("feature_flags")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -69,6 +71,7 @@ model Organization {
   imports       Import[]
   rules         CategoryRule[]
   metricsSnapshots MetricsSnapshot[]
+  aiInsights       AiInsight[]
 
   @@map("organizations")
 }
@@ -306,6 +309,55 @@ model MetricsSnapshot {
 
   @@unique([organizationId, asOf])
   @@map("metrics_snapshots")
+}
+
+// ---------------------------------------------------------------------------
+// AI insights (plan E8 / Phase 4; CEO findings 4.1, 8.1)
+// ---------------------------------------------------------------------------
+
+enum InsightKind {
+  WEEKLY_BRIEF
+}
+
+enum InsightStatus {
+  /// Narrated by the model and grounding-validated.
+  GENERATED
+  /// Deterministic summary shown instead (model off, refused, malformed, or ungrounded twice).
+  DEGRADED
+}
+
+/// One brief per organization per period. Stores the exact input snapshot, the
+/// raw model response, and the validated output so a wrong brief can be
+/// replayed weeks later.
+model AiInsight {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String        @map("organization_id") @db.Uuid
+  kind           InsightKind   @default(WEEKLY_BRIEF)
+  periodStart    DateTime      @map("period_start") @db.Date
+  periodEnd      DateTime      @map("period_end") @db.Date
+  status         InsightStatus
+  /// Model id that narrated it, or null when degraded / model off.
+  model          String?
+  promptVersion  String        @map("prompt_version")
+  /// BriefInput: metrics view + anomalies as handed to the model.
+  inputSnapshot  Json          @map("input_snapshot")
+  rawResponse    String?       @map("raw_response")
+  /// MoneyBrief (services/ai/schema.ts).
+  brief          Json
+  /// Why the model output was rejected, when it was.
+  degradedReason String?       @map("degraded_reason")
+  requestId      String?       @map("request_id")
+  regenerations  Int           @default(0)
+  emailedAt      DateTime?     @map("emailed_at") @db.Timestamptz(3)
+  /// Set the first time a member opens it (the first-open reveal).
+  firstOpenedAt  DateTime?     @map("first_opened_at") @db.Timestamptz(3)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, kind, periodStart])
+  @@map("ai_insights")
 }
 
 // ---------------------------------------------------------------------------

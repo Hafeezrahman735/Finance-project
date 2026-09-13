@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Config } from "./config.js";
 import type { Db } from "./db/prisma.js";
 import { MembershipRole } from "./generated/prisma/enums.js";
-import { ValidationError as ValidationErrorForRoute } from "./lib/errors.js";
+import { NotFoundError, ValidationError as ValidationErrorForRoute } from "./lib/errors.js";
 import { sendWorkbook } from "./lib/excel.js";
 import { protect, requireOrg } from "./middleware/auth.js";
 import { body, validateBody } from "./middleware/validate.js";
@@ -16,6 +16,8 @@ import { importsService, MAX_FILE_BYTES } from "./services/banking/imports.js";
 import { createRuleSchema, rulesService } from "./services/rules/rules.js";
 import { dashboardService } from "./services/dashboard/dashboard.js";
 import { metricsService } from "./services/metrics/metrics.js";
+import { briefService, type BriefOrg } from "./services/ai/brief.js";
+import type { BriefModel } from "./services/ai/model.js";
 import { createSchema, listQuerySchema, transactionsService, updateSchema } from "./services/transactions/transactions.js";
 
 /**
@@ -45,6 +47,8 @@ const actor = (req: Request) => ({ userId: req.user?.id ?? null, requestId: req.
 
 export interface RouteDeps {
   email: EmailSink;
+  /** The brief's model seam (anthropic | recorded | off). */
+  briefModel: BriefModel;
   logger?: Logger;
 }
 
@@ -60,6 +64,12 @@ export function routeTable(db: Db, config: Config, deps: RouteDeps): RouteDef[] 
   const txns = transactionsService(db);
   const dashboard = dashboardService(db);
   const metrics = metricsService(db);
+  const briefs = briefService(db, { metrics, model: deps.briefModel, email: deps.email, appUrl: config.APP_URL, logger: deps.logger });
+  /** The org context plus its feature flags (the brief is flag-gated per org). */
+  const briefOrg = async (req: Request): Promise<BriefOrg> => {
+    const row = await db.organization.findUnique({ where: { id: req.org!.id }, select: { featureFlags: true } });
+    return { ...req.org!, featureFlags: row?.featureFlags };
+  };
   const banks = bankAccountsService(db);
   const imports = importsService(db);
   const rules = rulesService(db);
@@ -172,6 +182,25 @@ export function routeTable(db: Db, config: Config, deps: RouteDeps): RouteDef[] 
 
     // --- dashboard --------------------------------------------------------
     { method: "get", path: "/dashboard", access: MembershipRole.VIEWER, handler: async (req, res) => res.json(await dashboard.get(req.org!.id, req.org!.currency, req.org!.timezone)) },
+    // --- weekly brief (plan E8): one per org per week; generated on first read; regenerate capped ---
+    {
+      method: "get",
+      path: "/briefs/current",
+      access: MembershipRole.VIEWER,
+      handler: async (req, res) => {
+        const brief = await briefs.current(await briefOrg(req), new Date(), { peek: req.query.peek === "1" });
+        res.json({ enabled: brief !== null, brief });
+      },
+    },
+    { method: "post", path: "/briefs/current/regenerate", access: MembershipRole.ADMIN, handler: async (req, res) => res.json({ brief: await briefs.generate(await briefOrg(req), new Date(), { regenerate: true }) }) },
+    { method: "post", path: "/briefs/current/email", access: MembershipRole.ADMIN, handler: async (req, res) => {
+      const org = await briefOrg(req);
+      const current = await briefs.current(org);
+      if (!current) throw new NotFoundError("The brief is switched off for this organization", "brief_disabled");
+      res.json({ sent: await briefs.emailBrief(org, current.id) });
+    } },
+    { method: "get", path: "/briefs", access: MembershipRole.VIEWER, handler: async (req, res) => res.json({ data: await briefs.list(req.org!.id) }) },
+    { method: "get", path: "/briefs/:id", access: MembershipRole.VIEWER, handler: async (req, res) => res.json({ brief: await briefs.get(req.org!.id, req.params.id as string) }) },
     // --- metrics (plan E1): deterministic numbers with ids + display strings; cached per day ---
     { method: "get", path: "/metrics", access: MembershipRole.VIEWER, handler: async (req, res) => res.json(await metrics.get(req.org!.id, req.org!.currency, req.org!.timezone)) },
 

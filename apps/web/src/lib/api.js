@@ -34,6 +34,16 @@ export const dashboard = {
   get: () => axiosInstance.get(API_PATHS.DASHBOARD.GET_DATA).then((r) => r.data),
 };
 
+/** Weekly Money Brief (plan E8). `current` generates this week's on first read; `peek` reads without marking the first open. */
+export const briefs = {
+  current: () => axiosInstance.get(API_PATHS.BRIEFS.CURRENT, { timeout: 90000 }).then((r) => r.data),
+  peek: () => axiosInstance.get(API_PATHS.BRIEFS.CURRENT, { params: { peek: 1 }, timeout: 90000 }).then((r) => r.data),
+  regenerate: () => axiosInstance.post(API_PATHS.BRIEFS.REGENERATE, {}, { timeout: 90000 }).then((r) => r.data),
+  email: () => axiosInstance.post(API_PATHS.BRIEFS.EMAIL).then((r) => r.data),
+  list: () => axiosInstance.get(API_PATHS.BRIEFS.LIST).then((r) => r.data.data),
+  get: (id) => axiosInstance.get(API_PATHS.BRIEFS.ONE(id)).then((r) => r.data.brief),
+};
+
 /** Deterministic metrics with ids and display strings (plan E1); cached server-side per day. */
 export const metrics = {
   get: () => axiosInstance.get(API_PATHS.METRICS.GET).then((r) => r.data),
